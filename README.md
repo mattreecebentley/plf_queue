@@ -9,4 +9,4 @@ Compared to std::queue it is:
 * 560% faster for large structs
 * 147% faster on average across types
 
-- Averaged across total numbers of stored elements ranging between 10 and 1000000, with the number of samples = 126 and the number of elements increasing by 10% per sample.
+(Averaged across total numbers of stored elements ranging between 10 and 1000000, with the number of samples = 126 and the number of elements increasing by 10% per sample. Larger numbers of elements tend to perform better.)
