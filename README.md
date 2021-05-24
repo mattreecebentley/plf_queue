@@ -12,4 +12,5 @@ Compared to std::queue it is:
 (Averaged across total numbers of stored elements ranging between 10 and 1000000, with the number of samples = 126 and the number of elements increasing by 10% per sample. Larger numbers of elements tend to perform better. These benchmarks are performed without calling reserve() on plf::queue, but if reserve() is used, the performance advantage will be even greater)
 
 Full benchmarks and methodology are here: https://plflib.org/queue_benchmarks_i5_gcc.htm
-Description of container and functions here: https://plflib.org/queue.htm
+
+Full description of container and functions here: https://plflib.org/queue.htm
