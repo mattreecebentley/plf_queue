@@ -341,7 +341,7 @@ private:
 
 
 	#define PLF_MIN_BLOCK_CAPACITY (sizeof(element_type) * 8 > (sizeof(*this) + sizeof(group)) * 2) ? 8 : (((sizeof(*this) + sizeof(group)) * 2) / sizeof(element_type)) + 1
-
+	#define PLF_MAX_BLOCK_CAPACITY ((sizeof(element_type) > 128) ? 1024 : 12288 / sizeof(element_type))
 
 public:
 
@@ -356,7 +356,7 @@ public:
 		total_size(0),
 		total_capacity(0),
 		min_block_capacity(PLF_MIN_BLOCK_CAPACITY),
-		group_allocator_pair(std::numeric_limits<size_type>::max() / 2)
+		group_allocator_pair(PLF_MAX_BLOCK_CAPACITY)
 	{}
 
 
@@ -371,13 +371,13 @@ public:
 		total_size(0),
 		total_capacity(0),
 		min_block_capacity(PLF_MIN_BLOCK_CAPACITY),
-		group_allocator_pair(std::numeric_limits<size_type>::max() / 2)
+		group_allocator_pair(PLF_MAX_BLOCK_CAPACITY)
 	{}
 
 
 
 	// Constructor with minimum & maximum group size parameters:
-	queue(const size_type min, const size_type max = (std::numeric_limits<size_type>::max() / 2)):
+	queue(const size_type min, const size_type max = PLF_MAX_BLOCK_CAPACITY):
 		element_allocator_type(element_allocator_type()),
 		current_group(NULL),
 		first_group(NULL),
@@ -475,10 +475,11 @@ private:
 	{
 		if (current_group->next_group == NULL) // no reserved groups or groups left over from previous pops, allocate new group
 		{
-			// Logic: if total_size < current group capacity * 1.5, make new group size same as current group size - this means we are more likely to end up with blocks of equal capacity when the total size is not increasing significantly over time - which in turn means blocks get reused on pop()
+			// Logic: if total_size > current group capacity * 1.25 or total_size < current group capacity * .75, make new group capacity == total_size, otherwise make it same as current group capacity. The new size is then truncated if necessary to fit within the user-specified min/max block sizes. This means we are more likely to end up with blocks of equal capacity when the total size is not increasing or lowering significantly over time - which in turn means previous blocks can get reused when they become empty.
 			const size_type current_group_capacity = static_cast<size_type>(current_group->end - current_group->elements);
-			const size_type potential_new_group_size = (total_size < (current_group_capacity * 1.5)) ? current_group_capacity : total_size;
-			const size_type new_group_capacity = (potential_new_group_size < group_allocator_pair.max_block_capacity) ? potential_new_group_size : group_allocator_pair.max_block_capacity;
+			const size_type new_group_capacity = ((total_size < static_cast<size_type>(current_group_capacity * 2)) & (total_size > static_cast<size_type>(current_group_capacity * .5))) ? current_group_capacity :
+															(total_size < min_block_capacity) ? min_block_capacity :
+															(total_size > group_allocator_pair.max_block_capacity) ? group_allocator_pair.max_block_capacity : total_size;
 			allocate_new_group(new_group_capacity, current_group);
 		}
 
@@ -1383,6 +1384,7 @@ inline void swap (plf::queue<element_type, element_allocator_type> &a, plf::queu
 
 
 #undef PLF_MIN_BLOCK_CAPACITY
+#undef PLF_MAX_BLOCK_CAPACITY
 #undef PLF_FORCE_INLINE
 #undef PLF_ALIGNMENT_SUPPORT
 #undef PLF_INITIALIZER_LIST_SUPPORT
