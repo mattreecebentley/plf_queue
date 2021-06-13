@@ -239,7 +239,17 @@
 namespace plf
 {
 
-template <class element_type, class element_allocator_type = std::allocator<element_type> > class queue : private element_allocator_type // Empty base class optimisation - inheriting allocator functions
+struct queue_limits // for use in block_capacity setting/getting functions and constructors
+{
+	size_t min, max;
+	queue_limits(const size_t minimum, const size_t maximum) PLF_NOEXCEPT : min(minimum), max(maximum) {}
+};
+
+
+enum queue_priority { speed = 1, memory = 4};
+
+
+template <class element_type, plf::queue_priority priority = plf::memory, class element_allocator_type = std::allocator<element_type> > class queue : private element_allocator_type // Empty base class optimisation - inheriting allocator functions
 {
 public:
 	// Standard container typedefs:
@@ -340,8 +350,8 @@ private:
 	}
 
 
-	#define PLF_MIN_BLOCK_CAPACITY (sizeof(element_type) * 8 > (sizeof(*this) + sizeof(group)) * 2) ? 8 : (((sizeof(*this) + sizeof(group)) * 2) / sizeof(element_type)) + 1
-	#define PLF_MAX_BLOCK_CAPACITY ((sizeof(element_type) > 128) ? 1024 : 12288 / sizeof(element_type))
+	#define PLF_MIN_BLOCK_CAPACITY ((sizeof(element_type) * 8 > (sizeof(*this) + sizeof(group)) * 2) ? 8 : (((sizeof(*this) + sizeof(group)) * 2) / sizeof(element_type)) + 1) / priority
+	#define PLF_MAX_BLOCK_CAPACITY ((sizeof(element_type) > 128) ? 768 : 12288 / sizeof(element_type)) / priority
 
 public:
 
@@ -477,9 +487,10 @@ private:
 		{
 			// Logic: if total_size > current group capacity * 1.25 or total_size < current group capacity * .75, make new group capacity == total_size, otherwise make it same as current group capacity. The new size is then truncated if necessary to fit within the user-specified min/max block sizes. This means we are more likely to end up with blocks of equal capacity when the total size is not increasing or lowering significantly over time - which in turn means previous blocks can get reused when they become empty.
 			const size_type current_group_capacity = static_cast<size_type>(current_group->end - current_group->elements);
-			const size_type new_group_capacity = ((total_size < static_cast<size_type>(current_group_capacity * 2)) & (total_size > static_cast<size_type>(current_group_capacity * .5))) ? current_group_capacity :
-															(total_size < min_block_capacity) ? min_block_capacity :
-															(total_size > group_allocator_pair.max_block_capacity) ? group_allocator_pair.max_block_capacity : total_size;
+			const size_type divided_size = total_size / priority;
+			const size_type new_group_capacity = ((divided_size < static_cast<size_type>(current_group_capacity * 2)) & (divided_size > static_cast<size_type>(current_group_capacity * .5))) ? current_group_capacity :
+															(divided_size < min_block_capacity) ? min_block_capacity :
+															(divided_size > group_allocator_pair.max_block_capacity) ? group_allocator_pair.max_block_capacity : divided_size;
 			allocate_new_group(new_group_capacity, current_group);
 		}
 
@@ -1374,8 +1385,8 @@ public:
 namespace std
 {
 
-template <class element_type, class element_allocator_type>
-inline void swap (plf::queue<element_type, element_allocator_type> &a, plf::queue<element_type, element_allocator_type> &b) PLF_NOEXCEPT_SWAP(element_allocator_type)
+template <class element_type, plf::queue_priority q_priority, class element_allocator_type>
+inline void swap (plf::queue<element_type, q_priority, element_allocator_type> &a, plf::queue<element_type, q_priority, element_allocator_type> &b) PLF_NOEXCEPT_SWAP(element_allocator_type)
 {
 	a.swap(b);
 }
