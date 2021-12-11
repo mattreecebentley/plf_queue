@@ -223,6 +223,9 @@
 #include <memory> // std::uninitialized_copy, std::allocator
 #include <stdexcept> // std::length_error
 
+#ifdef PLF_CPP20_SUPPORT
+	#include <algorithm> // lexicographical_three_way_compare
+#endif
 
 #ifdef PLF_MOVE_SEMANTICS_SUPPORT
 	#include <utility> // std::move
@@ -1206,6 +1209,15 @@ public:
 	{
 		return !(*this == rh);
 	}
+
+
+
+	#ifdef PLF_CPP20_SUPPORT
+		friend auto operator <=> (const queue &lh, const queue &rh)
+		{
+			return std::lexicographical_compare_three_way(lh.begin(), lh.end(), rh.begin(), rh.end());
+		}
+	#endif
 
 
 

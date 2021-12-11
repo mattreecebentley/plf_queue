@@ -205,6 +205,13 @@ int main()
  			failpass("Equality operator test 2", i_queue == i_queue2);
 
  			i_queue2.push(5);
+
+ 			failpass("Inequality operator test", i_queue != i_queue2);
+
+			#ifdef PLF_TEST_CPP20_SUPPORT
+				failpass("Spaceship operator test", (i_queue1 <=> i_queue2) != 0);
+			#endif
+
  			i_queue2.swap(i_queue3);
 
  			failpass("Swap test", i_queue2.size() == i_queue3.size() - 1);
