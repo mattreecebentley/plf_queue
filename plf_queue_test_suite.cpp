@@ -74,7 +74,6 @@
 	#include <utility> // std::move
 #endif
 
-#include "plf_rand.h"
 #include "plf_queue.h"
 
 
@@ -208,10 +207,6 @@ int main()
 
  			failpass("Inequality operator test", i_queue != i_queue2);
 
-			#ifdef PLF_TEST_CPP20_SUPPORT
-				failpass("Spaceship operator test", (i_queue1 <=> i_queue2) != 0);
-			#endif
-
  			i_queue2.swap(i_queue3);
 
  			failpass("Swap test", i_queue2.size() == i_queue3.size() - 1);
@@ -243,7 +238,7 @@ int main()
 
  			do
  			{
- 				if ((plf::rand() & 3) == 0)
+ 				if ((rand() & 3) == 0)
  				{
  					i_queue.push(10);
  				}
@@ -298,7 +293,7 @@ int main()
 
  			do
  			{
- 				if ((plf::rand() & 3) == 0)
+ 				if ((rand() & 3) == 0)
  				{
  					pop_total += i_queue.front();
 					i_queue.pop();
@@ -314,7 +309,7 @@ int main()
 
  			do
  			{
- 				if ((plf::rand() & 3) == 0)
+ 				if ((rand() & 3) == 0)
  				{
  					i_queue.push(10);
 					push_total += 10;

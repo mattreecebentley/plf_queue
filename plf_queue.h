@@ -1,4 +1,4 @@
-// Copyright (c) 2021, Matthew Bentley (mattreecebentley@gmail.com) www.plflib.org
+// Copyright (c) 2022, Matthew Bentley (mattreecebentley@gmail.com) www.plflib.org
 
 // zLib license (https://www.zlib.net/zlib_license.html):
 // This software is provided 'as-is', without any express or implied
@@ -22,17 +22,17 @@
 #define PLF_QUEUE_H
 
 
-
 // Compiler-specific defines:
 
-#if defined(_MSC_VER) && !defined(__clang__) && !defined(__GNUC__)
-	#define PLF_FORCE_INLINE __forceinline
+// Define default cases before possibly redefining:
+#define PLF_NOEXCEPT throw()
+#define PLF_NOEXCEPT_ALLOCATOR
+#define PLF_CONSTEXPR
+#define PLF_CONSTFUNC
 
+#if defined(_MSC_VER) && !defined(__clang__) && !defined(__GNUC__)
 	#if _MSC_VER >= 1600
 		#define PLF_MOVE_SEMANTICS_SUPPORT
-		#define PLF_STATIC_ASSERT(check, message) static_assert(check, message)
-	#else
-		#define PLF_STATIC_ASSERT(check, message) assert(check)
 	#endif
 	#if _MSC_VER >= 1700
 		#define PLF_TYPE_TRAITS_SUPPORT
@@ -40,43 +40,43 @@
 	#endif
 	#if _MSC_VER >= 1800
 		#define PLF_VARIADICS_SUPPORT // Variadics, in this context, means both variadic templates and variadic macros are supported
+		#define PLF_DEFAULT_TEMPLATE_ARGUMENT_SUPPORT
 		#define PLF_INITIALIZER_LIST_SUPPORT
 	#endif
 	#if _MSC_VER >= 1900
 		#define PLF_ALIGNMENT_SUPPORT
+		#undef PLF_NOEXCEPT
+		#undef PLF_NOEXCEPT_ALLOCATOR
 		#define PLF_NOEXCEPT noexcept
+		#define PLF_NOEXCEPT_ALLOCATOR noexcept(noexcept(allocator_type()))
 		#define PLF_IS_ALWAYS_EQUAL_SUPPORT
-	#else
-		#define PLF_NOEXCEPT throw()
 	#endif
 
 	#if defined(_MSVC_LANG) && (_MSVC_LANG >= 201703L)
+		#undef PLF_CONSTEXPR
 		#define PLF_CONSTEXPR constexpr
-	#else
-		#define PLF_CONSTEXPR
 	#endif
 
 	#if defined(_MSVC_LANG) && (_MSVC_LANG >= 202002L) && _MSC_VER >= 1929
 		#define PLF_CPP20_SUPPORT
+		#undef PLF_CONSTFUNC
+		#define PLF_CONSTFUNC constexpr
 	#endif
 #elif defined(__cplusplus) && __cplusplus >= 201103L // C++11 support, at least
-	#define PLF_FORCE_INLINE // note: GCC and clang create faster code without forcing inline
-
 	#if defined(__GNUC__) && defined(__GNUC_MINOR__) && !defined(__clang__) // If compiler is GCC/G++
-		#if (__GNUC__ == 4 && __GNUC_MINOR__ >= 3) || __GNUC__ > 4 // 4.2 and below do not support variadic templates
+		#if (__GNUC__ == 4 && __GNUC_MINOR__ >= 3) || __GNUC__ > 4
 			#define PLF_MOVE_SEMANTICS_SUPPORT
 			#define PLF_VARIADICS_SUPPORT
-			#define PLF_STATIC_ASSERT(check, message) static_assert(check, message)
-		#else
-			#define PLF_STATIC_ASSERT(check, message) assert(check)
 		#endif
-		#if (__GNUC__ == 4 && __GNUC_MINOR__ >= 4) || __GNUC__ > 4 // 4.3 and below do not support initializer lists
+		#if (__GNUC__ == 4 && __GNUC_MINOR__ >= 4) || __GNUC__ > 4
+			#define PLF_DEFAULT_TEMPLATE_ARGUMENT_SUPPORT
 			#define PLF_INITIALIZER_LIST_SUPPORT
 		#endif
 		#if (__GNUC__ == 4 && __GNUC_MINOR__ >= 6) || __GNUC__ > 4
+			#undef PLF_NOEXCEPT
+			#undef PLF_NOEXCEPT_ALLOCATOR
 			#define PLF_NOEXCEPT noexcept
-		#else
-			#define PLF_NOEXCEPT throw()
+			#define PLF_NOEXCEPT_ALLOCATOR noexcept(noexcept(allocator_type()))
 		#endif
 		#if (__GNUC__ == 4 && __GNUC_MINOR__ >= 7) || __GNUC__ > 4
 			#define PLF_ALLOCATOR_TRAITS_SUPPORT
@@ -90,51 +90,46 @@
 		#if __GNUC__ > 6
 			#define PLF_IS_ALWAYS_EQUAL_SUPPORT
 		#endif
-	#elif defined(__clang__) && !defined(__GLIBCXX__) && !defined(_LIBCPP_CXX03_LANG)
-		#if __clang_major__ >= 3 // clang versions < 3 don't support __has_feature() or traits
-			#define PLF_ALLOCATOR_TRAITS_SUPPORT
-			#define PLF_TYPE_TRAITS_SUPPORT
+	#elif defined(__clang__) && !defined(__GLIBCXX__) && !defined(_LIBCPP_CXX03_LANG) && __clang_major__ >= 3
+		#define PLF_DEFAULT_TEMPLATE_ARGUMENT_SUPPORT
+		#define PLF_ALLOCATOR_TRAITS_SUPPORT
+		#define PLF_TYPE_TRAITS_SUPPORT
 
-			#if __has_feature(cxx_alignas) && __has_feature(cxx_alignof)
-				#define PLF_ALIGNMENT_SUPPORT
-			#endif
-			#if __has_feature(cxx_noexcept)
-				#define PLF_NOEXCEPT noexcept
-				#define PLF_IS_ALWAYS_EQUAL_SUPPORT
-			#else
-				#define PLF_NOEXCEPT throw()
-			#endif
-			#if __has_feature(cxx_rvalue_references) && !defined(_LIBCPP_HAS_NO_RVALUE_REFERENCES)
-				#define PLF_MOVE_SEMANTICS_SUPPORT
-			#endif
-			#if __has_feature(cxx_static_assert)
-				#define PLF_STATIC_ASSERT(check, message) static_assert(check, message)
-			#else
-				#define PLF_STATIC_ASSERT(check, message) assert(check)
-			#endif
-			#if __has_feature(cxx_variadic_templates) && !defined(_LIBCPP_HAS_NO_VARIADICS)
-				#define PLF_VARIADICS_SUPPORT
-			#endif
-			#if (__clang_major__ == 3 && __clang_minor__ >= 1) || __clang_major__ > 3
-				#define PLF_INITIALIZER_LIST_SUPPORT
-			#endif
+		#if __has_feature(cxx_alignas) && __has_feature(cxx_alignof)
+			#define PLF_ALIGNMENT_SUPPORT
+		#endif
+		#if __has_feature(cxx_noexcept)
+			#undef PLF_NOEXCEPT
+			#undef PLF_NOEXCEPT_ALLOCATOR
+			#define PLF_NOEXCEPT noexcept
+			#define PLF_NOEXCEPT_ALLOCATOR noexcept(noexcept(allocator_type()))
+			#define PLF_IS_ALWAYS_EQUAL_SUPPORT
+		#endif
+		#if __has_feature(cxx_rvalue_references) && !defined(_LIBCPP_HAS_NO_RVALUE_REFERENCES)
+			#define PLF_MOVE_SEMANTICS_SUPPORT
+		#endif
+		#if __has_feature(cxx_variadic_templates) && !defined(_LIBCPP_HAS_NO_VARIADICS)
+			#define PLF_VARIADICS_SUPPORT
+		#endif
+		#if (__clang_major__ == 3 && __clang_minor__ >= 1) || __clang_major__ > 3
+			#define PLF_INITIALIZER_LIST_SUPPORT
 		#endif
 	#elif defined(__GLIBCXX__) // Using another compiler type with libstdc++ - we are assuming full c++11 compliance for compiler - which may not be true
+		#define PLF_DEFAULT_TEMPLATE_ARGUMENT_SUPPORT
+
 		#if __GLIBCXX__ >= 20080606
 			#define PLF_MOVE_SEMANTICS_SUPPORT
 			#define PLF_VARIADICS_SUPPORT
-			#define PLF_STATIC_ASSERT(check, message) static_assert(check, message)
-		#else
-			#define PLF_STATIC_ASSERT(check, message) assert(check)
 		#endif
 		#if __GLIBCXX__ >= 20090421
 			#define PLF_INITIALIZER_LIST_SUPPORT
 		#endif
 		#if __GLIBCXX__ >= 20120322
 			#define PLF_ALLOCATOR_TRAITS_SUPPORT
+			#undef PLF_NOEXCEPT
+			#undef PLF_NOEXCEPT_ALLOCATOR
 			#define PLF_NOEXCEPT noexcept
-		#else
-			#define PLF_NOEXCEPT throw()
+			#define PLF_NOEXCEPT_ALLOCATOR noexcept(noexcept(allocator_type()))
 		#endif
 		#if __GLIBCXX__ >= 20130322
 			#define PLF_ALIGNMENT_SUPPORT
@@ -146,47 +141,42 @@
 			#define PLF_IS_ALWAYS_EQUAL_SUPPORT
 		#endif
 	#elif defined(_LIBCPP_CXX03_LANG) || defined(_LIBCPP_HAS_NO_RVALUE_REFERENCES) // Special case for checking C++11 support with libCPP
-		#define PLF_STATIC_ASSERT(check, message) assert(check)
-		#define PLF_NOEXCEPT throw()
 		#if !defined(_LIBCPP_HAS_NO_VARIADICS)
 			#define PLF_VARIADICS_SUPPORT
 		#endif
 	#else // Assume type traits and initializer support for other compilers and standard library implementations
+		#define PLF_DEFAULT_TEMPLATE_ARGUMENT_SUPPORT
 		#define PLF_MOVE_SEMANTICS_SUPPORT
-		#define PLF_STATIC_ASSERT(check, message) static_assert(check, message)
 		#define PLF_VARIADICS_SUPPORT
 		#define PLF_TYPE_TRAITS_SUPPORT
 		#define PLF_ALLOCATOR_TRAITS_SUPPORT
 		#define PLF_ALIGNMENT_SUPPORT
 		#define PLF_INITIALIZER_LIST_SUPPORT
+		#undef PLF_NOEXCEPT
+		#undef PLF_NOEXCEPT_ALLOCATOR
 		#define PLF_NOEXCEPT noexcept
+		#define PLF_NOEXCEPT_ALLOCATOR noexcept(noexcept(allocator_type()))
 		#define PLF_IS_ALWAYS_EQUAL_SUPPORT
 	#endif
 
 	#if __cplusplus >= 201703L && ((defined(__clang__) && ((__clang_major__ == 3 && __clang_minor__ == 9) || __clang_major__ > 3)) || (defined(__GNUC__) && __GNUC__ >= 7) || (!defined(__clang__) && !defined(__GNUC__))) // assume correct C++17 implementation for non-gcc/clang compilers
+		#undef PLF_CONSTEXPR
 		#define PLF_CONSTEXPR constexpr
-	#else
-		#define PLF_CONSTEXPR
 	#endif
 
-	#if __cplusplus > 201704L && ((defined(__clang__) && (__clang_major__ >= 13)) || (defined(__GNUC__) && __GNUC__ >= 10) || (!defined(__clang__) && !defined(__GNUC__)))
+	#if __cplusplus > 201704L && ((defined(_LIBCPP_VERSION) && _LIBCPP_VERSION >= 13) || !defined(_LIBCPP_VERSION)) && ((defined(__clang__) && (__clang_major__ >= 13)) || (defined(__GNUC__) && __GNUC__ >= 10) || (!defined(__clang__) && !defined(__GNUC__)))
 		#define PLF_CPP20_SUPPORT
+		#undef PLF_CONSTFUNC
+		#define PLF_CONSTFUNC constexpr
 	#endif
-#else
-	#define PLF_FORCE_INLINE
-	#define PLF_STATIC_ASSERT(check, message) assert(check)
-	#define PLF_NOEXCEPT throw()
-	#define PLF_CONSTEXPR
 #endif
 
 #if defined(PLF_IS_ALWAYS_EQUAL_SUPPORT) && defined(PLF_MOVE_SEMANTICS_SUPPORT) && defined(PLF_ALLOCATOR_TRAITS_SUPPORT) && (__cplusplus >= 201703L || (defined(_MSVC_LANG) && (_MSVC_LANG >= 201703L)))
 	#define PLF_NOEXCEPT_MOVE_ASSIGN(the_allocator) noexcept(std::allocator_traits<the_allocator>::propagate_on_container_move_assignment::value || std::allocator_traits<the_allocator>::is_always_equal::value)
 	#define PLF_NOEXCEPT_SWAP(the_allocator) noexcept(std::allocator_traits<the_allocator>::propagate_on_container_swap::value || std::allocator_traits<the_allocator>::is_always_equal::value)
-	#define PLF_NOEXCEPT_SPLICE(the_allocator) noexcept(std::allocator_traits<the_allocator>::is_always_equal::value)
 #else
 	#define PLF_NOEXCEPT_MOVE_ASSIGN(the_allocator)
 	#define PLF_NOEXCEPT_SWAP(the_allocator)
-	#define PLF_NOEXCEPT_SPLICE(the_allocator)
 #endif
 
 #undef PLF_IS_ALWAYS_EQUAL_SUPPORT
@@ -194,23 +184,23 @@
 
 #ifdef PLF_ALLOCATOR_TRAITS_SUPPORT
 	#ifdef PLF_VARIADICS_SUPPORT
-		#define PLF_CONSTRUCT(the_allocator, allocator_instance, location, ...)	std::allocator_traits<the_allocator>::construct(allocator_instance, location, __VA_ARGS__)
+		#define PLF_CONSTRUCT(the_allocator, allocator_instance, location, ...) std::allocator_traits<the_allocator>::construct(allocator_instance, location, __VA_ARGS__)
 	#else
 		#define PLF_CONSTRUCT(the_allocator, allocator_instance, location, data)	std::allocator_traits<the_allocator>::construct(allocator_instance, location, data)
 	#endif
 
-	#define PLF_DESTROY(the_allocator, allocator_instance, location) 				std::allocator_traits<the_allocator>::destroy(allocator_instance, location)
-	#define PLF_ALLOCATE(the_allocator, allocator_instance, size, hint) 			std::allocator_traits<the_allocator>::allocate(allocator_instance, size, hint)
-	#define PLF_DEALLOCATE(the_allocator, allocator_instance, location, size) 	std::allocator_traits<the_allocator>::deallocate(allocator_instance, location, size)
+	#define PLF_DESTROY(the_allocator, allocator_instance, location)				std::allocator_traits<the_allocator>::destroy(allocator_instance, location)
+	#define PLF_ALLOCATE(the_allocator, allocator_instance, size, hint)			std::allocator_traits<the_allocator>::allocate(allocator_instance, size, hint)
+	#define PLF_DEALLOCATE(the_allocator, allocator_instance, location, size)	std::allocator_traits<the_allocator>::deallocate(allocator_instance, location, size)
 #else
 	#ifdef PLF_VARIADICS_SUPPORT
-		#define PLF_CONSTRUCT(the_allocator, allocator_instance, location, ...)		(allocator_instance).construct(location, __VA_ARGS__)
+		#define PLF_CONSTRUCT(the_allocator, allocator_instance, location, ...) 	(allocator_instance).construct(location, __VA_ARGS__)
 	#else
 		#define PLF_CONSTRUCT(the_allocator, allocator_instance, location, data)	(allocator_instance).construct(location, data)
 	#endif
 
-	#define PLF_DESTROY(the_allocator, allocator_instance, location) 				(allocator_instance).destroy(location)
-	#define PLF_ALLOCATE(the_allocator, allocator_instance, size, hint)	 		(allocator_instance).allocate(size, hint)
+	#define PLF_DESTROY(the_allocator, allocator_instance, location)				(allocator_instance).destroy(location)
+	#define PLF_ALLOCATE(the_allocator, allocator_instance, size, hint)			(allocator_instance).allocate(size, hint)
 	#define PLF_DEALLOCATE(the_allocator, allocator_instance, location, size)	(allocator_instance).deallocate(location, size)
 #endif
 
@@ -222,10 +212,6 @@
 #include <limits>  // std::numeric_limits
 #include <memory> // std::uninitialized_copy, std::allocator
 #include <stdexcept> // std::length_error
-
-#ifdef PLF_CPP20_SUPPORT
-	#include <algorithm> // lexicographical_three_way_compare
-#endif
 
 #ifdef PLF_MOVE_SEMANTICS_SUPPORT
 	#include <utility> // std::move
@@ -252,42 +238,41 @@ struct queue_limits // for use in block_capacity setting/getting functions and c
 enum queue_priority { speed = 1, memory = 4};
 
 
-template <class element_type, plf::queue_priority priority = plf::memory, class element_allocator_type = std::allocator<element_type> > class queue : private element_allocator_type // Empty base class optimisation - inheriting allocator functions
+template <class element_type, plf::queue_priority priority = plf::memory, class allocator_type = std::allocator<element_type> > class queue : private allocator_type // Empty base class optimisation - inheriting allocator functions
 {
 public:
 	// Standard container typedefs:
-	typedef element_type																					value_type;
-	typedef element_allocator_type																	allocator_type;
+	typedef element_type																			value_type;
 
 	#ifdef PLF_ALLOCATOR_TRAITS_SUPPORT
-		typedef typename std::allocator_traits<element_allocator_type>::size_type		size_type;
-		typedef element_type &																			reference;
-		typedef const element_type &																	const_reference;
-		typedef typename std::allocator_traits<element_allocator_type>::pointer 		pointer;
-		typedef typename std::allocator_traits<element_allocator_type>::const_pointer	const_pointer;
+		typedef typename std::allocator_traits<allocator_type>::size_type			size_type;
+		typedef element_type &																	reference;
+		typedef const element_type &															const_reference;
+		typedef typename std::allocator_traits<allocator_type>::pointer 			pointer;
+		typedef typename std::allocator_traits<allocator_type>::const_pointer	const_pointer;
 	#else
-		typedef typename element_allocator_type::size_type			size_type;
-		typedef typename element_allocator_type::reference			reference;
-		typedef typename element_allocator_type::const_reference	const_reference;
-		typedef typename element_allocator_type::pointer			pointer;
-		typedef typename element_allocator_type::const_pointer	const_pointer;
+		typedef typename allocator_type::size_type			size_type;
+		typedef typename allocator_type::reference			reference;
+		typedef typename allocator_type::const_reference	const_reference;
+		typedef typename allocator_type::pointer				pointer;
+		typedef typename allocator_type::const_pointer		const_pointer;
 	#endif
 
 private:
 	struct group; // Forward declaration for typedefs below
 
 	#ifdef PLF_ALLOCATOR_TRAITS_SUPPORT
-		typedef typename std::allocator_traits<element_allocator_type>::template rebind_alloc<group> group_allocator_type;
-		typedef typename std::allocator_traits<group_allocator_type>::pointer								group_pointer_type;
-		typedef typename std::allocator_traits<element_allocator_type>::pointer 							element_pointer_type;
+		typedef typename std::allocator_traits<allocator_type>::template rebind_alloc<group> group_allocator_type;
+		typedef typename std::allocator_traits<group_allocator_type>::pointer					group_pointer_type;
+		typedef typename std::allocator_traits<allocator_type>::pointer 							element_pointer_type;
 	#else
-		typedef typename element_allocator_type::template rebind<group>::other	group_allocator_type;
-		typedef typename group_allocator_type::pointer									group_pointer_type;
-		typedef typename element_allocator_type::pointer								element_pointer_type;
+		typedef typename allocator_type::template rebind<group>::other	group_allocator_type;
+		typedef typename group_allocator_type::pointer						group_pointer_type;
+		typedef typename allocator_type::pointer								element_pointer_type;
 	#endif
 
 
-	struct group : private element_allocator_type
+	struct group : private allocator_type
 	{
 		const element_pointer_type		elements;
 		group_pointer_type				next_group, previous_group;
@@ -296,7 +281,7 @@ private:
 
 		#ifdef PLF_VARIADICS_SUPPORT
 			group(const size_type elements_per_group, group_pointer_type const previous = NULL):
-				elements(PLF_ALLOCATE(element_allocator_type, *this, elements_per_group, (previous == NULL) ? 0 : previous->elements)),
+				elements(PLF_ALLOCATE(allocator_type, *this, elements_per_group, (previous == NULL) ? 0 : previous->elements)),
 				next_group(NULL),
 				previous_group(previous),
 				end(elements + elements_per_group)
@@ -304,7 +289,7 @@ private:
 
 
 		#else
-			// This is a hack around the fact that element_allocator_type::construct only supports copy construction in C++03 and copy elision does not occur on the vast majority of compilers in this circumstance. And to avoid running out of memory (and performance loss) from allocating the same block twice, we're allocating in this constructor and moving data in the copy constructor.
+			// This is a hack around the fact that allocator_type::construct only supports copy construction in C++03 and copy elision does not occur on the vast majority of compilers in this circumstance. And to avoid running out of memory (and performance loss) from allocating the same block twice, we're allocating in this constructor and moving data in the copy constructor.
 			group(const size_type elements_per_group, group_pointer_type const previous = NULL) PLF_NOEXCEPT:
 				elements(NULL),
 				next_group(reinterpret_cast<group_pointer_type>(elements_per_group)),
@@ -315,8 +300,8 @@ private:
 
 			// Not a real copy constructor ie. actually a move constructor. Only used for allocator.construct in C++03 for reasons stated above:
 			group(const group &source):
-				element_allocator_type(source),
-				elements(PLF_ALLOCATE(element_allocator_type, *this, reinterpret_cast<size_type>(source.next_group), (source.previous_group == NULL) ? 0 : source.previous_group->elements)),
+				allocator_type(source),
+				elements(PLF_ALLOCATE(allocator_type, *this, reinterpret_cast<size_type>(source.next_group), (source.previous_group == NULL) ? 0 : source.previous_group->elements)),
 				next_group(NULL),
 				previous_group(source.previous_group),
 				end(elements + reinterpret_cast<size_type>(source.next_group))
@@ -328,7 +313,7 @@ private:
 		~group() PLF_NOEXCEPT
 		{
 			// Null check not necessary (for empty group and copied group as above) as deallocate will do it's own null check.
-			PLF_DEALLOCATE(element_allocator_type, *this, elements, static_cast<size_type>(end - elements));
+			PLF_DEALLOCATE(allocator_type, *this, elements, static_cast<size_type>(end - elements));
 		}
 	};
 
@@ -339,12 +324,15 @@ private:
 	struct ebco_pair : group_allocator_type // Packaging the group allocator with the least-used member variable, for empty-base-class optimization
 	{
 		size_type max_block_capacity;
-		explicit ebco_pair(const size_type max_elements) PLF_NOEXCEPT: max_block_capacity(max_elements) {};
-	}								group_allocator_pair;
+		ebco_pair(const size_type max_elements, const allocator_type &alloc) PLF_NOEXCEPT:
+			group_allocator_type(alloc),
+			max_block_capacity(max_elements)
+		{};
+	} group_allocator_pair;
 
 
 
-	inline void check_capacities_conformance(const size_type min, const size_type max) const
+	void check_capacities_conformance(const size_type min, const size_type max) const
 	{
   		if (min < 2 || min > max || max > (std::numeric_limits<size_type>::max() / 2))
 		{
@@ -359,8 +347,7 @@ private:
 public:
 
 	// Default constructor:
-	queue() PLF_NOEXCEPT:
-		element_allocator_type(element_allocator_type()),
+	PLF_CONSTFUNC queue() PLF_NOEXCEPT_ALLOCATOR:
 		current_group(NULL),
 		first_group(NULL),
 		top_element(NULL),
@@ -369,13 +356,13 @@ public:
 		total_size(0),
 		total_capacity(0),
 		min_block_capacity(PLF_MIN_BLOCK_CAPACITY),
-		group_allocator_pair(PLF_MAX_BLOCK_CAPACITY)
+		group_allocator_pair(PLF_MAX_BLOCK_CAPACITY, *this)
 	{}
 
 
 	// Allocator-extended constructor:
-	explicit queue(const element_allocator_type &alloc):
-		element_allocator_type(alloc),
+	explicit queue(const allocator_type &alloc):
+		allocator_type(alloc),
 		current_group(NULL),
 		first_group(NULL),
 		top_element(NULL),
@@ -384,14 +371,13 @@ public:
 		total_size(0),
 		total_capacity(0),
 		min_block_capacity(PLF_MIN_BLOCK_CAPACITY),
-		group_allocator_pair(PLF_MAX_BLOCK_CAPACITY)
+		group_allocator_pair(PLF_MAX_BLOCK_CAPACITY, alloc)
 	{}
 
 
 
 	// Constructor with minimum & maximum group size parameters:
 	queue(const size_type min, const size_type max = PLF_MAX_BLOCK_CAPACITY):
-		element_allocator_type(element_allocator_type()),
 		current_group(NULL),
 		first_group(NULL),
 		top_element(NULL),
@@ -400,7 +386,7 @@ public:
 		total_size(0),
 		total_capacity(0),
 		min_block_capacity(min),
-		group_allocator_pair(max)
+		group_allocator_pair(max, *this)
 	{
 		check_capacities_conformance(min, max);
 	}
@@ -408,8 +394,8 @@ public:
 
 
 	// Allocator-extended constructor with minimum & maximum group size parameters:
-	queue(const size_type min, const size_type max, const element_allocator_type &alloc):
-		element_allocator_type(alloc),
+	queue(const size_type min, const size_type max, const allocator_type &alloc):
+		allocator_type(alloc),
 		current_group(NULL),
 		first_group(NULL),
 		top_element(NULL),
@@ -418,7 +404,7 @@ public:
 		total_size(0),
 		total_capacity(0),
 		min_block_capacity(min),
-		group_allocator_pair(max)
+		group_allocator_pair(max, alloc)
 	{
 		check_capacities_conformance(min, max);
 	}
@@ -450,7 +436,7 @@ private:
 
 
 
-	inline void deallocate_group(group_pointer_type const the_group) PLF_NOEXCEPT
+	void deallocate_group(group_pointer_type const the_group) PLF_NOEXCEPT
 	{
 		PLF_DESTROY(group_allocator_type, group_allocator_pair, the_group);
 		PLF_DEALLOCATE(group_allocator_type, group_allocator_pair, the_group, 1);
@@ -484,7 +470,7 @@ private:
 
 
 
-	inline void progress_to_next_group() // used by push/emplace
+	void progress_to_next_group() // used by push/emplace
 	{
 		if (current_group->next_group == NULL) // no reserved groups or groups left over from previous pops, allocate new group
 		{
@@ -582,7 +568,7 @@ private:
 
 					for (element_pointer_type element_pointer = start_element; element_pointer != past_end; ++element_pointer)
 					{
-						PLF_DESTROY(element_allocator_type, *this, element_pointer);
+						PLF_DESTROY(allocator_type, *this, element_pointer);
 					}
 
 					const group_pointer_type next_group = first_group->next_group;
@@ -596,7 +582,7 @@ private:
 
 				for (element_pointer_type element_pointer = start_element; element_pointer != past_end; ++element_pointer)
 				{
-					PLF_DESTROY(element_allocator_type, *this, element_pointer);
+					PLF_DESTROY(allocator_type, *this, element_pointer);
 				}
 
 				first_group = first_group->next_group; // To further process reserved groups in the following loop
@@ -616,7 +602,7 @@ private:
 
 
 
-	inline void blank() PLF_NOEXCEPT
+	void blank() PLF_NOEXCEPT
 	{
 		#ifdef PLF_TYPE_TRAITS_SUPPORT
 			if PLF_CONSTEXPR (std::is_trivial<group_pointer_type>::value && std::is_trivial<element_pointer_type>::value) // if all pointer types are trivial, we can just nuke it from orbit with memset (NULL is always 0 in C++):
@@ -642,7 +628,11 @@ public:
 
 	// Copy constructor:
 	queue(const queue &source):
-		element_allocator_type(source),
+		#if defined(__cplusplus) && __cplusplus >= 201103L
+			allocator_type(std::allocator_traits<allocator_type>::select_on_container_copy_construction(source)),
+		#else
+			allocator_type(source),
+		#endif
 		current_group(NULL),
 		first_group(NULL),
 		top_element(NULL),
@@ -651,7 +641,7 @@ public:
 		total_size(0),
 		total_capacity(0),
 		min_block_capacity(source.min_block_capacity),
-		group_allocator_pair(source.group_allocator_pair.max_block_capacity)
+		group_allocator_pair(source.group_allocator_pair.max_block_capacity, *this)
 	{
 		copy_from_source(source);
 	}
@@ -660,7 +650,7 @@ public:
 
 	// Allocator-extended copy constructor:
 	queue(const queue &source, const allocator_type &alloc):
-		element_allocator_type(alloc),
+		allocator_type(alloc),
 		current_group(NULL),
 		first_group(NULL),
 		top_element(NULL),
@@ -669,7 +659,7 @@ public:
 		total_size(0),
 		total_capacity(0),
 		min_block_capacity(source.min_block_capacity),
-		group_allocator_pair(source.group_allocator_pair.max_block_capacity)
+		group_allocator_pair(source.group_allocator_pair.max_block_capacity, alloc)
 	{
 		copy_from_source(source);
 	}
@@ -679,7 +669,7 @@ public:
 	#ifdef PLF_MOVE_SEMANTICS_SUPPORT
 		// move constructor
 		queue(queue &&source) PLF_NOEXCEPT:
-			element_allocator_type(source),
+			allocator_type(source),
 			current_group(std::move(source.current_group)),
 			first_group(std::move(source.first_group)),
 			top_element(std::move(source.top_element)),
@@ -688,7 +678,7 @@ public:
 			total_size(source.total_size),
 			total_capacity(source.total_capacity),
 			min_block_capacity(source.min_block_capacity),
-			group_allocator_pair(source.group_allocator_pair.max_block_capacity)
+			group_allocator_pair(source.group_allocator_pair.max_block_capacity, source)
 		{
 			source.blank();
 		}
@@ -696,7 +686,7 @@ public:
 
 		// allocator-extended move constructor
 		queue(queue &&source, const allocator_type &alloc):
-			element_allocator_type(alloc),
+			allocator_type(alloc),
 			current_group(std::move(source.current_group)),
 			first_group(std::move(source.first_group)),
 			top_element(std::move(source.top_element)),
@@ -705,7 +695,7 @@ public:
 			total_size(source.total_size),
 			total_capacity(source.total_capacity),
 			min_block_capacity(source.min_block_capacity),
-			group_allocator_pair(source.group_allocator_pair.max_block_capacity)
+			group_allocator_pair(source.group_allocator_pair.max_block_capacity, alloc)
 		{
 			source.blank();
 		}
@@ -735,14 +725,14 @@ public:
 		#ifdef PLF_TYPE_TRAITS_SUPPORT
 			if PLF_CONSTEXPR (std::is_nothrow_copy_constructible<element_type>::value)
 			{
-				PLF_CONSTRUCT(element_allocator_type, *this, top_element, element);
+				PLF_CONSTRUCT(allocator_type, *this, top_element, element);
 			}
 			else
 		#endif
 		{
 			try
 			{
-				PLF_CONSTRUCT(element_allocator_type, *this, top_element, element);
+				PLF_CONSTRUCT(allocator_type, *this, top_element, element);
 			}
 			catch (...)
 			{
@@ -783,14 +773,14 @@ public:
 			#ifdef PLF_TYPE_TRAITS_SUPPORT
 				if PLF_CONSTEXPR (std::is_nothrow_move_constructible<element_type>::value)
 				{
-					PLF_CONSTRUCT(element_allocator_type, *this, top_element, std::move(element));
+					PLF_CONSTRUCT(allocator_type, *this, top_element, std::move(element));
 				}
 				else
 			#endif
 			{
 				try
 				{
-					PLF_CONSTRUCT(element_allocator_type, *this, top_element, std::move(element));
+					PLF_CONSTRUCT(allocator_type, *this, top_element, std::move(element));
 				}
 				catch (...)
 				{
@@ -833,14 +823,14 @@ public:
 			#ifdef PLF_TYPE_TRAITS_SUPPORT
 				if PLF_CONSTEXPR (std::is_nothrow_move_constructible<element_type>::value)
 				{
-					PLF_CONSTRUCT(element_allocator_type, *this, top_element, std::forward<arguments>(parameters)...);
+					PLF_CONSTRUCT(allocator_type, *this, top_element, std::forward<arguments>(parameters)...);
 				}
 				else
 			#endif
 			{
 				try
 				{
-					PLF_CONSTRUCT(element_allocator_type, *this, top_element, std::forward<arguments>(parameters)...);
+					PLF_CONSTRUCT(allocator_type, *this, top_element, std::forward<arguments>(parameters)...);
 				}
 				catch (...)
 				{
@@ -865,7 +855,7 @@ public:
 
 
 
-	inline PLF_FORCE_INLINE reference front() const // Exception may occur if queue is empty in release mode
+	reference front() const // Exception may occur if queue is empty in release mode
 	{
 		assert(total_size != 0);
 		return *start_element;
@@ -873,7 +863,7 @@ public:
 
 
 
-	inline PLF_FORCE_INLINE reference back() const // Exception may occur if queue is empty in release mode
+	reference back() const // Exception may occur if queue is empty in release mode
 	{
 		assert(total_size != 0);
 		return *top_element;
@@ -889,7 +879,7 @@ public:
 			if PLF_CONSTEXPR (!std::is_trivially_destructible<element_type>::value)
 		#endif
 		{
-			PLF_DESTROY(element_allocator_type, *this, start_element);
+			PLF_DESTROY(allocator_type, *this, start_element);
 		}
 
 		if (--total_size == 0)
@@ -920,7 +910,7 @@ public:
 
 
 
-	inline queue & operator = (const queue &source)
+	queue & operator = (const queue &source)
 	{
 		assert(&source != this);
 
@@ -946,23 +936,43 @@ public:
 
 			destroy_all_data();
 
-			#ifdef PLF_TYPE_TRAITS_SUPPORT
-				if PLF_CONSTEXPR (std::is_trivial<group_pointer_type>::value && std::is_trivial<element_pointer_type>::value)
-				{
-					std::memcpy(static_cast<void *>(this), &source, sizeof(queue));
-				}
-				else
+			#ifdef PLF_ALLOCATOR_TRAITS_SUPPORT
+				if (std::allocator_traits<allocator_type>::propagate_on_container_move_assignment::value || std::allocator_traits<allocator_type>::is_always_equal::value || static_cast<allocator_type &>(*this) == static_cast<allocator_type &>(source))
+			#else
+				if (static_cast<allocator_type &>(*this) == static_cast<allocator_type &>(source))
 			#endif
 			{
-				current_group = std::move(source.current_group);
-				first_group = std::move(source.first_group);
-				top_element = std::move(source.top_element);
-				start_element = std::move(source.start_element);
-				end_element = std::move(source.end_element);
-				total_size = source.total_size;
-				total_capacity = source.total_capacity;
-				min_block_capacity = source.min_block_capacity;
-				group_allocator_pair.max_block_capacity = source.group_allocator_pair.max_block_capacity;
+				#if defined(PLF_TYPE_TRAITS_SUPPORT) && defined(PLF_ALLOCATOR_TRAITS_SUPPORT)
+					if PLF_CONSTEXPR ((std::is_trivially_copyable<allocator_type>::value || std::allocator_traits<allocator_type>::is_always_equal::value) &&
+						std::is_trivial<group_pointer_type>::value && std::is_trivial<element_pointer_type>::value)
+					{
+						std::memcpy(static_cast<void *>(this), &source, sizeof(queue));
+					}
+					else
+				#endif
+				{
+					current_group = std::move(source.current_group);
+					first_group = std::move(source.first_group);
+					top_element = std::move(source.top_element);
+					start_element = std::move(source.start_element);
+					end_element = std::move(source.end_element);
+					total_size = source.total_size;
+					total_capacity = source.total_capacity;
+					min_block_capacity = source.min_block_capacity;
+					group_allocator_pair.max_block_capacity = source.group_allocator_pair.max_block_capacity;
+
+					if PLF_CONSTEXPR(std::allocator_traits<allocator_type>::propagate_on_container_move_assignment::value)
+					{
+						static_cast<allocator_type &>(*this) = std::move(static_cast<allocator_type &>(source));
+						// Reconstruct rebinds:
+						static_cast<group_allocator_type &>(group_allocator_pair) = group_allocator_type(*this);
+					}
+				}
+			}
+			else // Allocator isn't movable so move elements from source and deallocate the source's blocks:
+			{
+				queue temp(source);
+				swap(temp);
 			}
 
 			source.blank();
@@ -975,26 +985,26 @@ public:
 	#ifdef PLF_CPP20_SUPPORT
 		[[nodiscard]]
 	#endif
-	inline PLF_FORCE_INLINE bool empty() const PLF_NOEXCEPT
+	bool empty() const PLF_NOEXCEPT
 	{
 		return total_size == 0;
 	}
 
 
 
-	inline PLF_FORCE_INLINE size_type size() const PLF_NOEXCEPT
+	size_type size() const PLF_NOEXCEPT
 	{
 		return total_size;
 	}
 
 
 
-	inline size_type max_size() const PLF_NOEXCEPT
+	size_type max_size() const PLF_NOEXCEPT
 	{
 		#ifdef PLF_ALLOCATOR_TRAITS_SUPPORT
-			return std::allocator_traits<element_allocator_type>::max_size(*this);
+			return std::allocator_traits<allocator_type>::max_size(*this);
 		#else
-			return element_allocator_type::max_size();
+			return allocator_type::max_size();
 		#endif
 	}
 
@@ -1091,7 +1101,7 @@ private:
 
 
 
-	inline void consolidate()
+	void consolidate()
 	{
 		#ifdef PLF_MOVE_SEMANTICS_SUPPORT
 			queue temp((min_block_capacity > total_size) ? min_block_capacity : ((total_size > group_allocator_pair.max_block_capacity) ? group_allocator_pair.max_block_capacity : total_size), group_allocator_pair.max_block_capacity); // Make first allocated block as large as size(), where possible
@@ -1205,19 +1215,10 @@ public:
 
 
 
-	inline bool operator != (const queue &rh) const PLF_NOEXCEPT
+	bool operator != (const queue &rh) const PLF_NOEXCEPT
 	{
 		return !(*this == rh);
 	}
-
-
-
-	#ifdef PLF_CPP20_SUPPORT
-		friend auto operator <=> (const queue &lh, const queue &rh)
-		{
-			return std::lexicographical_compare_three_way(lh.begin(), lh.end(), rh.begin(), rh.end());
-		}
-	#endif
 
 
 
@@ -1334,17 +1335,17 @@ public:
 
 
 
-	inline allocator_type get_allocator() const PLF_NOEXCEPT
+	allocator_type get_allocator() const PLF_NOEXCEPT
 	{
-		return element_allocator_type();
+		return allocator_type();
 	}
 
 
 
-	void swap(queue &source) PLF_NOEXCEPT_SWAP(element_allocator_type)
+	void swap(queue &source) PLF_NOEXCEPT_SWAP(allocator_type)
 	{
 		#ifdef PLF_TYPE_TRAITS_SUPPORT
-			if PLF_CONSTEXPR (std::is_trivial<group_pointer_type>::value && std::is_trivial<element_pointer_type>::value) // if all pointer types are trivial we can just copy using memcpy - faster
+			if PLF_CONSTEXPR (std::allocator_traits<allocator_type>::is_always_equal::value && std::is_trivial<group_pointer_type>::value && std::is_trivial<element_pointer_type>::value) // if all pointer types are trivial we can just copy using memcpy - avoids constructors/destructors etc and is faster
 			{
 				char temp[sizeof(queue)];
 				std::memcpy(&temp, static_cast<void *>(this), sizeof(queue));
@@ -1385,6 +1386,24 @@ public:
 			source.total_capacity = swap_total_capacity;
 			source.min_block_capacity = swap_min_block_capacity;
 			source.group_allocator_pair.max_block_capacity = swap_max_block_capacity;
+
+			#ifdef PLF_ALLOCATOR_TRAITS_SUPPORT
+				if PLF_CONSTEXPR (std::allocator_traits<allocator_type>::propagate_on_container_swap::value && !std::allocator_traits<allocator_type>::is_always_equal::value)
+			#endif
+			{
+				#ifdef PLF_MOVE_SEMANTICS_SUPPORT
+					allocator_type swap_allocator = std::move(static_cast<allocator_type &>(source));
+					static_cast<allocator_type &>(source) = std::move(static_cast<allocator_type &>(*this));
+					static_cast<allocator_type &>(*this) = std::move(swap_allocator);
+				#else
+					allocator_type swap_allocator = static_cast<allocator_type &>(source);
+					static_cast<allocator_type &>(source) = static_cast<allocator_type &>(*this);
+					static_cast<allocator_type &>(*this) = swap_allocator;
+				#endif
+
+				// Reconstruct rebinds for swapped allocators:
+				static_cast<group_allocator_type &>(group_allocator_pair) = group_allocator_type(*this);
+			} // else: undefined behaviour, as per standard
 		}
 	}
 
@@ -1394,11 +1413,12 @@ public:
 } // plf namespace
 
 
+
 namespace std
 {
 
-template <class element_type, plf::queue_priority q_priority, class element_allocator_type>
-inline void swap (plf::queue<element_type, q_priority, element_allocator_type> &a, plf::queue<element_type, q_priority, element_allocator_type> &b) PLF_NOEXCEPT_SWAP(element_allocator_type)
+template <class element_type, plf::queue_priority q_priority, class allocator_type>
+void swap (plf::queue<element_type, q_priority, allocator_type> &a, plf::queue<element_type, q_priority, allocator_type> &b) PLF_NOEXCEPT_SWAP(allocator_type)
 {
 	a.swap(b);
 }
@@ -1408,7 +1428,8 @@ inline void swap (plf::queue<element_type, q_priority, element_allocator_type> &
 
 #undef PLF_MIN_BLOCK_CAPACITY
 #undef PLF_MAX_BLOCK_CAPACITY
-#undef PLF_FORCE_INLINE
+
+#undef PLF_DEFAULT_TEMPLATE_ARGUMENT_SUPPORT
 #undef PLF_ALIGNMENT_SUPPORT
 #undef PLF_INITIALIZER_LIST_SUPPORT
 #undef PLF_TYPE_TRAITS_SUPPORT
@@ -1416,11 +1437,12 @@ inline void swap (plf::queue<element_type, q_priority, element_allocator_type> &
 #undef PLF_VARIADICS_SUPPORT
 #undef PLF_MOVE_SEMANTICS_SUPPORT
 #undef PLF_NOEXCEPT
+#undef PLF_NOEXCEPT_ALLOCATOR
 #undef PLF_NOEXCEPT_SWAP
 #undef PLF_NOEXCEPT_MOVE_ASSIGN
 #undef PLF_CONSTEXPR
+#undef PLF_CONSTFUNC
 #undef PLF_CPP20_SUPPORT
-#undef PLF_STATIC_ASSERT
 
 #undef PLF_CONSTRUCT
 #undef PLF_DESTROY
