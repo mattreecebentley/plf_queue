@@ -605,7 +605,7 @@ private:
 	void blank() PLF_NOEXCEPT
 	{
 		#ifdef PLF_TYPE_TRAITS_SUPPORT
-			if PLF_CONSTEXPR (std::is_trivial<group_pointer_type>::value && std::is_trivial<element_pointer_type>::value) // if all pointer types are trivial, we can just nuke it from orbit with memset (NULL is always 0 in C++):
+			if PLF_CONSTEXPR (std::is_standard_layout<queue>::value && std::allocator_traits<allocator_type>::is_always_equal::value && std::is_trivial<group_pointer_type>::value && std::is_trivial<element_pointer_type>::value) // if all pointer types are trivial, we can just nuke it from orbit with memset (NULL is always 0 in C++):
 			{
 				std::memset(static_cast<void *>(this), 0, offsetof(queue, min_block_capacity));
 			}
