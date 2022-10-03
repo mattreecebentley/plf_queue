@@ -669,7 +669,7 @@ public:
 	#ifdef PLF_MOVE_SEMANTICS_SUPPORT
 		// move constructor
 		queue(queue &&source) PLF_NOEXCEPT:
-			allocator_type(source),
+			allocator_type(std::move(static_cast<allocator_type &>(source))),
 			current_group(std::move(source.current_group)),
 			first_group(std::move(source.first_group)),
 			top_element(std::move(source.top_element)),
@@ -961,7 +961,9 @@ public:
 					min_block_capacity = source.min_block_capacity;
 					group_allocator_pair.max_block_capacity = source.group_allocator_pair.max_block_capacity;
 
-					if PLF_CONSTEXPR(std::allocator_traits<allocator_type>::propagate_on_container_move_assignment::value)
+					#ifdef PLF_ALLOCATOR_TRAITS_SUPPORT
+						if PLF_CONSTEXPR(std::allocator_traits<allocator_type>::propagate_on_container_move_assignment::value)
+					#endif
 					{
 						static_cast<allocator_type &>(*this) = std::move(static_cast<allocator_type &>(source));
 						// Reconstruct rebinds:
