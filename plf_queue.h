@@ -1,4 +1,4 @@
-// Copyright (c) 2022, Matthew Bentley (mattreecebentley@gmail.com) www.plflib.org
+// Copyright (c) 2023, Matthew Bentley (mattreecebentley@gmail.com) www.plflib.org
 
 // zLib license (https://www.zlib.net/zlib_license.html):
 // This software is provided 'as-is', without any express or implied
@@ -29,6 +29,14 @@
 #define PLF_NOEXCEPT_ALLOCATOR
 #define PLF_CONSTEXPR
 #define PLF_CONSTFUNC
+
+#define PLF_EXCEPTIONS_SUPPORT
+
+#if ((defined(__clang__) || defined(__GNUC__)) && !defined(__EXCEPTIONS)) || (defined(_MSC_VER) && !defined(_CPPUNWIND))
+	#undef PLF_EXCEPTIONS_SUPPORT
+#else
+	#include <exception> // std::terminate
+#endif
 
 #if defined(_MSC_VER) && !defined(__clang__) && !defined(__GNUC__)
 	#if _MSC_VER >= 1600
@@ -336,7 +344,11 @@ private:
 	{
   		if (min < 2 || min > max || max > (std::numeric_limits<size_type>::max() / 2))
 		{
-			throw std::length_error("Supplied memory block capacities outside of allowable ranges");
+			#ifdef PLF_EXCEPTIONS_SUPPORT
+				throw std::length_error("Supplied memory block capacities outside of allowable ranges");
+			#else
+				std::terminate();
+			#endif
 		}
 	}
 
@@ -417,19 +429,27 @@ private:
 	{
 		previous_group->next_group = PLF_ALLOCATE(group_allocator_type, group_allocator_pair, 1, previous_group);
 
-		try
-		{
+		#ifdef PLF_EXCEPTIONS_SUPPORT
+			try
+			{
+				#ifdef PLF_VARIADICS_SUPPORT
+					PLF_CONSTRUCT(group_allocator_type, group_allocator_pair, previous_group->next_group, capacity, previous_group);
+				#else
+					PLF_CONSTRUCT(group_allocator_type, group_allocator_pair, previous_group->next_group, group(capacity, previous_group));
+				#endif
+			}
+			catch (...)
+			{
+				PLF_DEALLOCATE(group_allocator_type, group_allocator_pair, previous_group->next_group, 1);
+				throw;
+			}
+		#else
 			#ifdef PLF_VARIADICS_SUPPORT
 				PLF_CONSTRUCT(group_allocator_type, group_allocator_pair, previous_group->next_group, capacity, previous_group);
 			#else
 				PLF_CONSTRUCT(group_allocator_type, group_allocator_pair, previous_group->next_group, group(capacity, previous_group));
 			#endif
-		}
-		catch (...)
-		{
-			PLF_DEALLOCATE(group_allocator_type, group_allocator_pair, previous_group->next_group, 1);
-			throw;
-		}
+		#endif
 
 		total_capacity += capacity;
 	}
@@ -448,20 +468,28 @@ private:
 	{
 		first_group = current_group = PLF_ALLOCATE(group_allocator_type, group_allocator_pair, 1, 0);
 
-		try
-		{
+		#ifdef PLF_EXCEPTIONS_SUPPORT
+			try
+			{
+				#ifdef PLF_VARIADICS_SUPPORT
+					PLF_CONSTRUCT(group_allocator_type, group_allocator_pair, first_group, min_block_capacity);
+				#else
+					PLF_CONSTRUCT(group_allocator_type, group_allocator_pair, first_group, group(min_block_capacity));
+				#endif
+			}
+			catch (...)
+			{
+				PLF_DEALLOCATE(group_allocator_type, group_allocator_pair, first_group, 1);
+				first_group = current_group = NULL;
+				throw;
+			}
+		#else
 			#ifdef PLF_VARIADICS_SUPPORT
 				PLF_CONSTRUCT(group_allocator_type, group_allocator_pair, first_group, min_block_capacity);
 			#else
 				PLF_CONSTRUCT(group_allocator_type, group_allocator_pair, first_group, group(min_block_capacity));
 			#endif
-		}
-		catch (...)
-		{
-			PLF_DEALLOCATE(group_allocator_type, group_allocator_pair, first_group, 1);
-			first_group = current_group = NULL;
-			throw;
-		}
+		#endif
 
 		start_element = top_element = first_group->elements;
 		end_element = first_group->end;
@@ -730,25 +758,29 @@ public:
 			else
 		#endif
 		{
-			try
-			{
-				PLF_CONSTRUCT(allocator_type, *this, top_element, element);
-			}
-			catch (...)
-			{
-				if (top_element == start_element && total_size != 0) // for post-initialize push
+			#ifdef PLF_EXCEPTIONS_SUPPORT
+				try
 				{
-					current_group = current_group->previous_group;
-					start_element = current_group->elements;
-					top_element = current_group->end - 1;
+					PLF_CONSTRUCT(allocator_type, *this, top_element, element);
 				}
-				else
+				catch (...)
 				{
-					--top_element;
-				}
+					if (top_element == start_element && total_size != 0) // for post-initialize push
+					{
+						current_group = current_group->previous_group;
+						start_element = current_group->elements;
+						top_element = current_group->end - 1;
+					}
+					else
+					{
+						--top_element;
+					}
 
-				throw;
-			}
+					throw;
+				}
+			#else
+				PLF_CONSTRUCT(allocator_type, *this, top_element, element);
+			#endif
 		}
 
 		++total_size;
@@ -778,25 +810,29 @@ public:
 				else
 			#endif
 			{
-				try
-				{
-					PLF_CONSTRUCT(allocator_type, *this, top_element, std::move(element));
-				}
-				catch (...)
-				{
-					if (top_element == start_element && total_size != 0)
+				#ifdef PLF_EXCEPTIONS_SUPPORT
+					try
 					{
-						current_group = current_group->previous_group;
-						start_element = current_group->elements;
-						top_element = current_group->end - 1;
+						PLF_CONSTRUCT(allocator_type, *this, top_element, std::move(element));
 					}
-					else
+					catch (...)
 					{
-						--top_element;
-					}
+						if (top_element == start_element && total_size != 0)
+						{
+							current_group = current_group->previous_group;
+							start_element = current_group->elements;
+							top_element = current_group->end - 1;
+						}
+						else
+						{
+							--top_element;
+						}
 
-					throw;
-				}
+						throw;
+					}
+				#else
+					PLF_CONSTRUCT(allocator_type, *this, top_element, std::move(element));
+				#endif
 			}
 
 			++total_size;
@@ -828,25 +864,29 @@ public:
 				else
 			#endif
 			{
-				try
-				{
-					PLF_CONSTRUCT(allocator_type, *this, top_element, std::forward<arguments>(parameters)...);
-				}
-				catch (...)
-				{
-					if (top_element == start_element && total_size != 0)
+				#ifdef PLF_EXCEPTIONS_SUPPORT
+					try
 					{
-						current_group = current_group->previous_group;
-						start_element = current_group->elements;
-						top_element = current_group->end - 1;
+						PLF_CONSTRUCT(allocator_type, *this, top_element, std::forward<arguments>(parameters)...);
 					}
-					else
+					catch (...)
 					{
-						--top_element;
-					}
+						if (top_element == start_element && total_size != 0)
+						{
+							current_group = current_group->previous_group;
+							start_element = current_group->elements;
+							top_element = current_group->end - 1;
+						}
+						else
+						{
+							--top_element;
+						}
 
-					throw;
-				}
+						throw;
+					}
+				#else
+					PLF_CONSTRUCT(allocator_type, *this, top_element, std::forward<arguments>(parameters)...);
+				#endif
 			}
 
 			++total_size;
@@ -1147,7 +1187,11 @@ public:
 				#ifdef PLF_TYPE_TRAITS_SUPPORT // If type is non-copyable/movable, cannot be consolidated, throw exception:
 					if PLF_CONSTEXPR (!((std::is_copy_constructible<element_type>::value && std::is_copy_assignable<element_type>::value) || (std::is_move_constructible<element_type>::value && std::is_move_assignable<element_type>::value)))
 					{
-						throw;
+						#ifdef PLF_EXCEPTIONS_SUPPORT
+							throw;
+						#else
+							std::terminate();
+						#endif
 					}
 					else
 				#endif
@@ -1431,6 +1475,7 @@ void swap (plf::queue<element_type, q_priority, allocator_type> &a, plf::queue<e
 #undef PLF_MIN_BLOCK_CAPACITY
 #undef PLF_MAX_BLOCK_CAPACITY
 
+#undef PLF_EXCEPTIONS_SUPPORT
 #undef PLF_DEFAULT_TEMPLATE_ARGUMENT_SUPPORT
 #undef PLF_ALIGNMENT_SUPPORT
 #undef PLF_INITIALIZER_LIST_SUPPORT
