@@ -229,11 +229,97 @@
 	#include <type_traits> // std::is_trivially_destructible
 #endif
 
+#ifdef PLF_CPP20_SUPPORT
+	#include <compare> // std::to_address
+#endif
 
 
 
 namespace plf
 {
+	// std:: tool replacements for C++03/98/11 support:
+
+#ifndef PLF_TOOLS
+	#define PLF_TOOLS
+
+	template <bool condition, class T = void>
+	struct enable_if
+	{
+		typedef T type;
+	};
+
+	template <class T>
+	struct enable_if<false, T>
+	{};
+
+
+
+	template <bool flag, class is_true, class is_false> struct conditional;
+
+	template <class is_true, class is_false> struct conditional<true, is_true, is_false>
+	{
+		typedef is_true type;
+	};
+
+	template <class is_true, class is_false> struct conditional<false, is_true, is_false>
+	{
+		typedef is_false type;
+	};
+
+
+
+	template <class element_type>
+	struct less
+	{
+		bool operator() (const element_type &a, const element_type &b) const PLF_NOEXCEPT
+		{
+			return a < b;
+		}
+	};
+
+
+
+	template<class element_type>
+	struct equal_to
+	{
+		const element_type value;
+
+		explicit equal_to(const element_type store_value): // no noexcept as element may allocate and potentially throw when copied
+			value(store_value)
+		{}
+
+		bool operator() (const element_type compare_value) const PLF_NOEXCEPT
+		{
+			return value == compare_value;
+		}
+	};
+
+
+
+	// To enable conversion to void * when allocator supplies non-raw pointers:
+	template <class source_pointer_type>
+	static PLF_CONSTFUNC void * void_cast(const source_pointer_type source_pointer) PLF_NOEXCEPT
+	{
+		#if defined(PLF_CPP20_SUPPORT)
+			return static_cast<void *>(std::to_address(source_pointer));
+		#else
+			return static_cast<void *>(&*source_pointer);
+		#endif
+	}
+
+
+
+	#ifdef PLF_MOVE_SEMANTICS_SUPPORT
+		template <class iterator_type>
+		PLF_CONSTFUNC std::move_iterator<iterator_type> make_move_iterator(iterator_type it)
+		{
+			return std::move_iterator<iterator_type>(std::move(it));
+		}
+	#endif
+#endif
+
+
+
 
 struct queue_limits // for use in block_capacity setting/getting functions and constructors
 {
@@ -296,7 +382,7 @@ private:
 
 
 		#else
-			// This is a hack around the fact that allocator_type::construct only supports copy construction in C++03 and copy elision does not occur on the vast majority of compilers in this circumstance. And to avoid running out of memory (and performance loss) from allocating the same block twice, we're allocating in this constructor and moving data in the copy constructor.
+			// This is a hack around the fact that allocator_type::construct only supports copy construction in C++03 and copy elision does not occur on the vast majority of compilers in this circumstance. And to avoid running out of memory (and performance loss) from allocating the same block twice, we're allocating in the copy constructor.
 			group(const size_type elements_per_group, group_pointer_type const previous = NULL) PLF_NOEXCEPT:
 				elements(NULL),
 				next_group(reinterpret_cast<group_pointer_type>(elements_per_group)),
@@ -1101,14 +1187,14 @@ private:
 				// Copy groups to this queue:
 				while (current_copy_group != end_copy_group)
 				{
-					std::uninitialized_copy(std::make_move_iterator(start_pointer), std::make_move_iterator(current_copy_group->end), top_element);
+					std::uninitialized_copy(plf::make_move_iterator(start_pointer), plf::make_move_iterator(current_copy_group->end), top_element);
 					top_element += current_copy_group->end - start_pointer;
 					current_copy_group = current_copy_group->next_group;
 					start_pointer = current_copy_group->elements;
 				}
 
 				// Handle special case of last group:
-				std::uninitialized_copy(std::make_move_iterator(start_pointer), std::make_move_iterator(source.top_element + 1), top_element);
+				std::uninitialized_copy(plf::make_move_iterator(start_pointer), plf::make_move_iterator(source.top_element + 1), top_element);
 				top_element += source.top_element - start_pointer; // This should make top_element == the last "pushed" element, rather than the one past it
 				end_element = top_element + 1; // Since we have created a single group where capacity == size, this is correct
 				total_size = source.total_size;
