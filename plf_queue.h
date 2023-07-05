@@ -33,6 +33,10 @@
 #define PLF_EXCEPTIONS_SUPPORT
 
 #if ((defined(__clang__) || defined(__GNUC__)) && !defined(__EXCEPTIONS)) || (defined(_MSC_VER) && !defined(_CPPUNWIND))
+    // Suppress incorrect (unfixed MSVC bug) warnings re: constant expressions in constexpr-if statements
+	#pragma warning ( push )
+    #pragma warning ( disable : 4127 )
+
 	#undef PLF_EXCEPTIONS_SUPPORT
 	#include <exception> // std::terminate
 #endif
@@ -300,7 +304,7 @@ namespace plf
 	template <class source_pointer_type>
 	static PLF_CONSTFUNC void * void_cast(const source_pointer_type source_pointer) PLF_NOEXCEPT
 	{
-		#if defined(PLF_CPP20_SUPPORT)
+		#ifdef PLF_CPP20_SUPPORT
 			return static_cast<void *>(std::to_address(source_pointer));
 		#else
 			return static_cast<void *>(&*source_pointer);
@@ -1580,5 +1584,9 @@ void swap (plf::queue<element_type, q_priority, allocator_type> &a, plf::queue<e
 #undef PLF_DESTROY
 #undef PLF_ALLOCATE
 #undef PLF_DEALLOCATE
+
+#if defined(_MSC_VER) && !defined(__clang__) && !defined(__GNUC__)
+	#pragma warning ( pop )
+#endif
 
 #endif // PLF_QUEUE_H
