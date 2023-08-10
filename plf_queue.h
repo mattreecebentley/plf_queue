@@ -233,9 +233,6 @@
 	#include <type_traits> // std::is_trivially_destructible
 #endif
 
-#ifdef PLF_CPP20_SUPPORT
-	#include <compare> // std::to_address
-#endif
 
 
 
@@ -320,38 +317,33 @@ namespace plf
 			return std::move_iterator<iterator_type>(std::move(it));
 		}
 	#endif
+
+
+
+	enum priority { performance = 1, memory_use = 4};
 #endif
 
 
 
 
-struct queue_limits // for use in block_capacity setting/getting functions and constructors
-{
-	size_t min, max;
-	queue_limits(const size_t minimum, const size_t maximum) PLF_NOEXCEPT : min(minimum), max(maximum) {}
-};
 
-
-enum queue_priority { speed = 1, memory = 4};
-
-
-template <class element_type, plf::queue_priority priority = plf::memory, class allocator_type = std::allocator<element_type> > class queue : private allocator_type // Empty base class optimisation - inheriting allocator functions
+template <class element_type, plf::priority priority = plf::memory_use, class allocator_type = std::allocator<element_type> > class queue : private allocator_type // Empty base class optimisation - inheriting allocator functions
 {
 public:
 	// Standard container typedefs:
-	typedef element_type																			value_type;
+	typedef element_type value_type;
 
 	#ifdef PLF_ALLOCATOR_TRAITS_SUPPORT
 		typedef typename std::allocator_traits<allocator_type>::size_type			size_type;
-		typedef element_type &																	reference;
-		typedef const element_type &															const_reference;
+		typedef element_type &														reference;
+		typedef const element_type &												const_reference;
 		typedef typename std::allocator_traits<allocator_type>::pointer 			pointer;
-		typedef typename std::allocator_traits<allocator_type>::const_pointer	const_pointer;
+		typedef typename std::allocator_traits<allocator_type>::const_pointer		const_pointer;
 	#else
 		typedef typename allocator_type::size_type			size_type;
 		typedef typename allocator_type::reference			reference;
 		typedef typename allocator_type::const_reference	const_reference;
-		typedef typename allocator_type::pointer				pointer;
+		typedef typename allocator_type::pointer			pointer;
 		typedef typename allocator_type::const_pointer		const_pointer;
 	#endif
 
@@ -359,13 +351,13 @@ private:
 	struct group; // Forward declaration for typedefs below
 
 	#ifdef PLF_ALLOCATOR_TRAITS_SUPPORT
-		typedef typename std::allocator_traits<allocator_type>::template rebind_alloc<group> group_allocator_type;
+		typedef typename std::allocator_traits<allocator_type>::template rebind_alloc<group> 	group_allocator_type;
 		typedef typename std::allocator_traits<group_allocator_type>::pointer					group_pointer_type;
-		typedef typename std::allocator_traits<allocator_type>::pointer 							element_pointer_type;
+		typedef typename std::allocator_traits<allocator_type>::pointer 						element_pointer_type;
 	#else
 		typedef typename allocator_type::template rebind<group>::other	group_allocator_type;
-		typedef typename group_allocator_type::pointer						group_pointer_type;
-		typedef typename allocator_type::pointer								element_pointer_type;
+		typedef typename group_allocator_type::pointer					group_pointer_type;
+		typedef typename allocator_type::pointer						element_pointer_type;
 	#endif
 
 
@@ -416,8 +408,8 @@ private:
 
 
 	group_pointer_type		current_group, first_group; // current group is location of top pointer, first_group is 'front' group, saves performance for ~queue etc
-	element_pointer_type		top_element, start_element, end_element; // start_element/end_element cache current_group->end/elements for better performance
-	size_type					total_size, total_capacity, min_block_capacity;
+	element_pointer_type	top_element, start_element, end_element; // start_element/end_element cache current_group->end/elements for better performance
+	size_type				total_size, total_capacity, min_block_capacity;
 	struct ebco_pair : group_allocator_type // Packaging the group allocator with the least-used member variable, for empty-base-class optimization
 	{
 		size_type max_block_capacity;
@@ -429,9 +421,9 @@ private:
 
 
 
-	void check_capacities_conformance(const size_type min, const size_type max) const
+	void check_capacities_conformance(const plf::limits capacities) const
 	{
-  		if (min < 2 || min > max || max > (std::numeric_limits<size_type>::max() / 2))
+  		if (capacities.min < 2 || capacities.min > capacities.max || capacities.max > (std::numeric_limits<size_type>::max() / 2))
 		{
 			#ifdef PLF_EXCEPTIONS_SUPPORT
 				throw std::length_error("Supplied memory block capacities outside of allowable ranges");
@@ -442,10 +434,25 @@ private:
 	}
 
 
-	#define PLF_MIN_BLOCK_CAPACITY ((sizeof(element_type) * 8 > (sizeof(*this) + sizeof(group)) * 2) ? 8 : (((sizeof(*this) + sizeof(group)) * 2) / sizeof(element_type)) + 1) / priority
-	#define PLF_MAX_BLOCK_CAPACITY ((sizeof(element_type) > 128) ? 768 : 12288 / sizeof(element_type)) / priority
 
 public:
+
+
+	static PLF_CONSTFUNC size_type default_min_block_capacity() PLF_NOEXCEPT
+	{
+		return ((sizeof(element_type) * 8 > (sizeof(queue) + sizeof(group)) * 2) ? 8 : (((sizeof(queue) + sizeof(group)) * 2) / sizeof(element_type)) + 1) / priority;
+	}
+	
+	
+
+	static PLF_CONSTFUNC size_type default_max_block_capacity() PLF_NOEXCEPT
+	{
+		return ((sizeof(element_type) > 128) ? 768 : 12288 / sizeof(element_type)) / priority;
+	}
+	
+	
+	
+
 
 	// Default constructor:
 	PLF_CONSTFUNC queue() PLF_NOEXCEPT_ALLOCATOR:
@@ -456,8 +463,8 @@ public:
 		end_element(NULL),
 		total_size(0),
 		total_capacity(0),
-		min_block_capacity(PLF_MIN_BLOCK_CAPACITY),
-		group_allocator_pair(PLF_MAX_BLOCK_CAPACITY, *this)
+		min_block_capacity(default_min_block_capacity()),
+		group_allocator_pair(default_max_block_capacity(), *this)
 	{}
 
 
@@ -471,14 +478,14 @@ public:
 		end_element(NULL),
 		total_size(0),
 		total_capacity(0),
-		min_block_capacity(PLF_MIN_BLOCK_CAPACITY),
-		group_allocator_pair(PLF_MAX_BLOCK_CAPACITY, alloc)
+		min_block_capacity(default_min_block_capacity()),
+		group_allocator_pair(default_max_block_capacity(), alloc)
 	{}
 
 
 
-	// Constructor with minimum & maximum group size parameters:
-	queue(const size_type min, const size_type max = PLF_MAX_BLOCK_CAPACITY):
+	// Constructor with limits:
+	queue(const size_type min, const size_type max = default_max_block_capacity()):
 		current_group(NULL),
 		first_group(NULL),
 		top_element(NULL),
@@ -839,15 +846,15 @@ public:
 		}
 
 		// Create element:
-		#ifdef PLF_TYPE_TRAITS_SUPPORT
-			if PLF_CONSTEXPR (std::is_nothrow_copy_constructible<element_type>::value)
+		#ifdef PLF_EXCEPTIONS_SUPPORT
+			#if defined(PLF_TYPE_TRAITS_SUPPORT)
+				if PLF_CONSTEXPR (std::is_nothrow_copy_constructible<element_type>::value)
+				{
+					PLF_CONSTRUCT(allocator_type, *this, top_element, element);
+				}
+				else
+			#endif
 			{
-				PLF_CONSTRUCT(allocator_type, *this, top_element, element);
-			}
-			else
-		#endif
-		{
-			#ifdef PLF_EXCEPTIONS_SUPPORT
 				try
 				{
 					PLF_CONSTRUCT(allocator_type, *this, top_element, element);
@@ -867,10 +874,10 @@ public:
 
 					throw;
 				}
-			#else
-				PLF_CONSTRUCT(allocator_type, *this, top_element, element);
-			#endif
-		}
+			}
+		#else
+			PLF_CONSTRUCT(allocator_type, *this, top_element, element);
+		#endif
 
 		++total_size;
 	}
@@ -878,7 +885,7 @@ public:
 
 
 	#ifdef PLF_MOVE_SEMANTICS_SUPPORT
-		// Note: the reason for code duplication from non-move push, as opposed to using std::forward for both, was because most compilers didn't actually create as-optimal code in that strategy. Also C++03 compatibility.
+		// Identical to non-move push asides from type traits checks
 		void push(element_type &&element)
 		{
 			if (top_element == NULL)
@@ -891,15 +898,15 @@ public:
 			}
 
 
-			#ifdef PLF_TYPE_TRAITS_SUPPORT
-				if PLF_CONSTEXPR (std::is_nothrow_move_constructible<element_type>::value)
+			#ifdef PLF_EXCEPTIONS_SUPPORT
+				#if defined(PLF_TYPE_TRAITS_SUPPORT)
+					if PLF_CONSTEXPR (std::is_nothrow_move_constructible<element_type>::value)
+					{
+						PLF_CONSTRUCT(allocator_type, *this, top_element, std::move(element));
+					}
+					else
+				#endif
 				{
-					PLF_CONSTRUCT(allocator_type, *this, top_element, std::move(element));
-				}
-				else
-			#endif
-			{
-				#ifdef PLF_EXCEPTIONS_SUPPORT
 					try
 					{
 						PLF_CONSTRUCT(allocator_type, *this, top_element, std::move(element));
@@ -919,10 +926,11 @@ public:
 
 						throw;
 					}
-				#else
-					PLF_CONSTRUCT(allocator_type, *this, top_element, std::move(element));
-				#endif
-			}
+				}
+			#else
+				PLF_CONSTRUCT(allocator_type, *this, top_element, std::move(element));
+			#endif
+
 
 			++total_size;
 		}
@@ -945,15 +953,15 @@ public:
 			}
 
 
-			#ifdef PLF_TYPE_TRAITS_SUPPORT
-				if PLF_CONSTEXPR (std::is_nothrow_move_constructible<element_type>::value)
+			#ifdef PLF_EXCEPTIONS_SUPPORT
+				#if defined(PLF_TYPE_TRAITS_SUPPORT)
+					if PLF_CONSTEXPR (std::is_nothrow_constructible<element_type>::value)
+					{
+						PLF_CONSTRUCT(allocator_type, *this, top_element, std::forward<arguments>(parameters)...);
+					}
+					else
+				#endif
 				{
-					PLF_CONSTRUCT(allocator_type, *this, top_element, std::forward<arguments>(parameters)...);
-				}
-				else
-			#endif
-			{
-				#ifdef PLF_EXCEPTIONS_SUPPORT
 					try
 					{
 						PLF_CONSTRUCT(allocator_type, *this, top_element, std::forward<arguments>(parameters)...);
@@ -973,10 +981,10 @@ public:
 
 						throw;
 					}
-				#else
-					PLF_CONSTRUCT(allocator_type, *this, top_element, std::forward<arguments>(parameters)...);
-				#endif
-			}
+				}
+			#else
+				PLF_CONSTRUCT(allocator_type, *this, top_element, std::forward<arguments>(parameters)...);
+			#endif
 
 			++total_size;
 		}
@@ -1235,7 +1243,7 @@ private:
 	void consolidate()
 	{
 		#ifdef PLF_MOVE_SEMANTICS_SUPPORT
-			queue temp((min_block_capacity > total_size) ? min_block_capacity : ((total_size > group_allocator_pair.max_block_capacity) ? group_allocator_pair.max_block_capacity : total_size), group_allocator_pair.max_block_capacity); // Make first allocated block as large as size(), where possible
+			queue temp(plf::limits((min_block_capacity > total_size) ? min_block_capacity : ((total_size > group_allocator_pair.max_block_capacity) ? group_allocator_pair.max_block_capacity : total_size), group_allocator_pair.max_block_capacity)); // Make first allocated block as large as size(), where possible
 
 			#ifdef PLF_TYPE_TRAITS_SUPPORT
 				if PLF_CONSTEXPR (std::is_move_assignable<element_type>::value && std::is_move_constructible<element_type>::value)
@@ -1261,17 +1269,17 @@ private:
 public:
 
 
-	void reshape(const size_type min, const size_type max)
+	void reshape(const plf::limits capacity_limits)
 	{
-		check_capacities_conformance(min, max);
+		check_capacities_conformance(capacity_limits);
 
-		min_block_capacity = min;
-		group_allocator_pair.max_block_capacity = max;
+		min_block_capacity = capacity_limits.min;
+		group_allocator_pair.max_block_capacity = capacity_limits.max;
 
 		// Need to check all group sizes, because append might append smaller blocks to the end of a larger block:
 		for (group_pointer_type current = first_group; current != NULL; current = current->next_group)
 		{
-			if (static_cast<size_type>(current->end - current->elements) < min || static_cast<size_type>(current->end - current->elements) > max)
+			if (static_cast<size_type>(current->end - current->elements) < capacity_limits.min || static_cast<size_type>(current->end - current->elements) > capacity_limits.max)
 			{
 				#ifdef PLF_TYPE_TRAITS_SUPPORT // If type is non-copyable/movable, cannot be consolidated, throw exception:
 					if PLF_CONSTEXPR (!((std::is_copy_constructible<element_type>::value && std::is_copy_assignable<element_type>::value) || (std::is_move_constructible<element_type>::value && std::is_move_assignable<element_type>::value)))
@@ -1543,7 +1551,574 @@ public:
 	}
 
 
+
+
+	// Iterators:
+
+	// Iterator forward declarations:
+	template <bool is_const> class			queue_iterator;
+	typedef queue_iterator<false>			iterator;
+	typedef queue_iterator<true> 			const_iterator;
+	friend class queue_iterator<false>;
+	friend class queue_iterator<true>;
+
+	template <bool is_const_r> class		queue_reverse_iterator;
+	typedef queue_reverse_iterator<false>	reverse_iterator;
+	typedef queue_reverse_iterator<true>	const_reverse_iterator;
+	friend class queue_reverse_iterator<false>;
+	friend class queue_reverse_iterator<true>;
+
+
+	
+	iterator begin() PLF_NOEXCEPT
+	{
+		return iterator(first_group, start_element);
+	}
+
+
+
+	const_iterator begin() const PLF_NOEXCEPT
+	{
+		return const_iterator(first_group, start_element);
+	}
+
+
+
+	iterator end() PLF_NOEXCEPT
+	{
+		return iterator(current_group, top_element + 1);
+	}
+
+
+
+	const_iterator end() const PLF_NOEXCEPT
+	{
+		return const_iterator(current_group, top_element + 1);
+	}
+
+
+
+	const_iterator cbegin() const PLF_NOEXCEPT
+	{
+		return const_iterator(first_group, start_element);
+	}
+
+
+
+	const_iterator cend() const PLF_NOEXCEPT
+	{
+		return const_iterator(current_group, top_element + 1);
+	}
+
+
+
+	reverse_iterator rbegin() PLF_NOEXCEPT
+	{
+		return reverse_iterator(current_group, top_element);
+	}
+
+
+
+	const_reverse_iterator rbegin() const PLF_NOEXCEPT
+	{
+		return const_reverse_iterator(current_group, top_element);
+	}
+
+
+
+	reverse_iterator rend() PLF_NOEXCEPT
+	{
+		return reverse_iterator(first_group, start_element - 1);
+	}
+
+
+
+	const_reverse_iterator rend() const PLF_NOEXCEPT
+	{
+		return const_reverse_iterator(first_group, start_element - 1);
+	}
+
+
+
+	const_reverse_iterator crbegin() const PLF_NOEXCEPT
+	{
+		return const_reverse_iterator(current_group, top_element);
+	}
+
+
+
+	const_reverse_iterator crend() const PLF_NOEXCEPT
+	{
+		return const_reverse_iterator(first_group, start_element - 1);
+	}
+
+
+
+	template <bool is_const>
+	class queue_iterator
+	{
+	private:
+		typedef typename queue::group_pointer_type 		group_pointer_type;
+		typedef typename queue::pointer				 	pointer_type;
+
+		group_pointer_type		group_pointer;
+		pointer_type 			element_pointer;
+
+	public:
+		struct queue_iterator_tag {};
+		typedef std::bidirectional_iterator_tag	iterator_category;
+		typedef std::bidirectional_iterator_tag	iterator_concept;
+		typedef typename queue::value_type 			value_type;
+		typedef typename queue::difference_type		difference_type;
+		typedef queue_reverse_iterator<is_const> 	reverse_type;
+		typedef typename plf::conditional<is_const, typename queue::const_pointer, typename queue::pointer>::type		pointer;
+		typedef typename plf::conditional<is_const, typename queue::const_reference, typename queue::reference>::type	reference;
+
+		friend class queue;
+		friend class queue_reverse_iterator<false>;
+		friend class queue_reverse_iterator<true>;
+
+
+		queue_iterator() PLF_NOEXCEPT:
+			group_pointer(NULL),
+			element_pointer(NULL)
+		{}
+
+
+
+		queue_iterator (const queue_iterator &source) PLF_NOEXCEPT:
+			group_pointer(source.group_pointer),
+			element_pointer(source.element_pointer)
+		{}
+
+
+
+		#ifdef PLF_DEFAULT_TEMPLATE_ARGUMENT_SUPPORT
+			template <bool is_const_it = is_const, class = typename plf::enable_if<is_const_it>::type >
+			queue_iterator(const queue_iterator<false> &source) PLF_NOEXCEPT:
+		#else
+			queue_iterator(const queue_iterator<!is_const> &source) PLF_NOEXCEPT:
+		#endif
+			group_pointer(source.group_pointer),
+			element_pointer(source.element_pointer)
+		{}
+
+
+
+		#ifdef PLF_MOVE_SEMANTICS_SUPPORT
+			queue_iterator(queue_iterator &&source) PLF_NOEXCEPT:
+				group_pointer(std::move(source.group_pointer)),
+				element_pointer(std::move(source.element_pointer))
+			{}
+
+
+
+			#ifdef PLF_DEFAULT_TEMPLATE_ARGUMENT_SUPPORT
+				template <bool is_const_it = is_const, class = typename plf::enable_if<is_const_it>::type >
+				queue_iterator(queue_iterator<false> &&source) PLF_NOEXCEPT:
+			#else
+				queue_iterator(const queue_iterator<!is_const> &&source) PLF_NOEXCEPT:
+			#endif
+				group_pointer(std::move(source.group_pointer)),
+				element_pointer(std::move(source.element_pointer))
+			{}
+		#endif
+
+
+
+		queue_iterator & operator = (const queue_iterator &source) PLF_NOEXCEPT
+		{
+			group_pointer = source.group_pointer;
+			element_pointer = source.element_pointer;
+			return *this;
+		}
+
+
+
+		#ifdef PLF_DEFAULT_TEMPLATE_ARGUMENT_SUPPORT
+			template <bool is_const_it = is_const, class = typename plf::enable_if<is_const_it>::type >
+			queue_iterator & operator = (const queue_iterator<false> &source) PLF_NOEXCEPT
+		#else
+			queue_iterator & operator = (const queue_iterator<!is_const> &source) PLF_NOEXCEPT
+		#endif
+		{
+			group_pointer = source.group_pointer;
+			element_pointer = source.element_pointer;
+			return *this;
+		}
+
+
+
+		#ifdef PLF_MOVE_SEMANTICS_SUPPORT
+			queue_iterator & operator = (queue_iterator &&source) PLF_NOEXCEPT
+			{
+				assert(&source != this);
+				group_pointer = std::move(source.group_pointer);
+				element_pointer = std::move(source.element_pointer);
+				return *this;
+			}
+
+
+
+			#ifdef PLF_DEFAULT_TEMPLATE_ARGUMENT_SUPPORT
+				template <bool is_const_it = is_const, class = typename plf::enable_if<is_const_it>::type >
+				queue_iterator & operator = (const queue_iterator<false> &&source) PLF_NOEXCEPT
+			#else
+				queue_iterator & operator = (const queue_iterator<!is_const> &&source) PLF_NOEXCEPT
+			#endif
+			{
+				group_pointer = std::move(source.group_pointer);
+				element_pointer = std::move(source.element_pointer);
+				return *this;
+			}
+		#endif
+
+
+
+		bool operator == (const queue_iterator &rh) const PLF_NOEXCEPT
+		{
+			return (element_pointer == rh.element_pointer);
+		}
+
+
+
+		bool operator == (const queue_iterator<!is_const> &rh) const PLF_NOEXCEPT
+		{
+			return (element_pointer == rh.element_pointer);
+		}
+
+
+
+		bool operator != (const queue_iterator &rh) const PLF_NOEXCEPT
+		{
+			return (element_pointer != rh.element_pointer);
+		}
+
+
+
+		bool operator != (const queue_iterator<!is_const> &rh) const PLF_NOEXCEPT
+		{
+			return (element_pointer != rh.element_pointer);
+		}
+
+
+
+		reference operator * () const // may cause exception with uninitialized iterator
+		{
+			return *element_pointer;
+		}
+
+
+
+		pointer operator -> () const
+		{
+			return element_pointer;
+		}
+
+
+
+		queue_iterator & operator ++ ()
+		{
+			assert(group_pointer != NULL); // covers uninitialised queue_iterator
+
+			if (++element_pointer == group_pointer->end && group_pointer->next_group != NULL)
+			{
+				group_pointer = group_pointer->next_group;
+				element_pointer = group_pointer->elements;
+			}
+
+			return *this;
+		}
+
+
+
+		queue_iterator operator ++(int)
+		{
+			const queue_iterator copy(*this);
+			++*this;
+			return copy;
+		}
+
+
+
+		queue_iterator & operator -- ()
+		{
+			assert(group_pointer != NULL);
+
+			if (element_pointer == group_pointer->elements && group_pointer->previous_group != NULL) // second condition necessary for matching to rend() in reverse_iterator
+			{
+				group_pointer = group_pointer->previous_group;
+				element_pointer = group_pointer->end;
+			}
+
+			--element_pointer;
+			return *this;
+		}
+
+
+
+		queue_iterator operator -- (int)
+		{
+			const queue_iterator copy(*this);
+			--*this;
+			return copy;
+		}
+
+
+
+	private:
+		// Used by cend(), erase() etc:
+		queue_iterator(const group_pointer_type group_p, const pointer_type element_p) PLF_NOEXCEPT:
+			group_pointer(group_p),
+			element_pointer(element_p)
+		{}
+
+
+	}; // queue_iterator
+
+
+
+
+	template <bool is_const_r>
+	class queue_reverse_iterator
+	{
+	private:
+		typedef typename queue::group_pointer_type 		group_pointer_type;
+		typedef typename queue::pointer				 	pointer_type;
+
+	protected:
+		iterator current;
+
+	public:
+		struct queue_iterator_tag {};
+		typedef std::bidirectional_iterator_tag 	iterator_category;
+		typedef std::bidirectional_iterator_tag 	iterator_concept;
+		typedef iterator 							iterator_type;
+		typedef typename queue::value_type 		value_type;
+		typedef typename queue::difference_type	difference_type;
+		typedef typename plf::conditional<is_const_r, typename queue::const_pointer, typename queue::pointer>::type		pointer;
+		typedef typename plf::conditional<is_const_r, typename queue::const_reference, typename queue::reference>::type	reference;
+
+		friend class queue;
+
+
+		queue_reverse_iterator () PLF_NOEXCEPT
+		{}
+
+
+
+		queue_reverse_iterator (const queue_reverse_iterator &source) PLF_NOEXCEPT:
+			current(source.current)
+		{}
+
+
+		#ifdef PLF_DEFAULT_TEMPLATE_ARGUMENT_SUPPORT
+			template <bool is_const_rit = is_const_r, class = typename plf::enable_if<is_const_rit>::type >
+			queue_reverse_iterator (const queue_reverse_iterator<false> &source) PLF_NOEXCEPT:
+		#else
+			queue_reverse_iterator (const queue_reverse_iterator<!is_const_r> &source) PLF_NOEXCEPT:
+		#endif
+			current(source.current)
+		{}
+
+
+		queue_reverse_iterator (const queue_iterator<is_const_r> &source) PLF_NOEXCEPT:
+			current(source)
+		{
+			++(*this);
+		}
+
+
+		#ifdef PLF_DEFAULT_TEMPLATE_ARGUMENT_SUPPORT
+			template <bool is_const_rit = is_const_r, class = typename plf::enable_if<is_const_rit>::type >
+			queue_reverse_iterator (const queue_iterator<false> &source) PLF_NOEXCEPT:
+		#else
+			queue_reverse_iterator (const queue_iterator<!is_const_r> &source) PLF_NOEXCEPT:
+		#endif
+			current(source)
+		{
+			++(*this);
+		}
+
+
+		#ifdef PLF_MOVE_SEMANTICS_SUPPORT
+			queue_reverse_iterator (queue_reverse_iterator &&source) PLF_NOEXCEPT:
+				current(std::move(source.current))
+			{}
+
+
+			#ifdef PLF_DEFAULT_TEMPLATE_ARGUMENT_SUPPORT
+				template <bool is_const_rit = is_const_r, class = typename plf::enable_if<is_const_rit>::type >
+				queue_reverse_iterator (queue_reverse_iterator<false> &&source) PLF_NOEXCEPT:
+			#else
+				queue_reverse_iterator (const queue_iterator<!is_const_r> &&source) PLF_NOEXCEPT:
+			#endif
+				current(std::move(source.current))
+			{}
+		#endif
+
+
+		queue_reverse_iterator& operator = (const queue_iterator<is_const_r> &source) PLF_NOEXCEPT
+		{
+			current = source;
+			++current;
+			return *this;
+		}
+
+
+		#ifdef PLF_DEFAULT_TEMPLATE_ARGUMENT_SUPPORT
+			template <bool is_const_rit = is_const_r, class = typename plf::enable_if<is_const_rit>::type >
+			queue_reverse_iterator& operator = (const queue_iterator<false> &source) PLF_NOEXCEPT
+		#else
+			queue_reverse_iterator& operator = (const queue_iterator<!is_const_r> &source) PLF_NOEXCEPT
+		#endif
+		{
+			current = source;
+			++current;
+			return *this;
+		}
+
+
+		queue_reverse_iterator& operator = (const queue_reverse_iterator &source) PLF_NOEXCEPT
+		{
+			current = source.current;
+			return *this;
+		}
+
+
+		#ifdef PLF_DEFAULT_TEMPLATE_ARGUMENT_SUPPORT
+			template <bool is_const_rit = is_const_r, class = typename plf::enable_if<is_const_rit>::type >
+			queue_reverse_iterator& operator = (const queue_reverse_iterator<false> &source) PLF_NOEXCEPT
+		#else
+			queue_reverse_iterator& operator = (const queue_reverse_iterator<!is_const_r> &source) PLF_NOEXCEPT
+		#endif
+		{
+			current = source.current;
+			return *this;
+		}
+
+
+		#ifdef PLF_MOVE_SEMANTICS_SUPPORT
+			queue_reverse_iterator& operator = (queue_reverse_iterator &&source) PLF_NOEXCEPT
+			{
+				assert(&source != this);
+				current = std::move(source.current);
+				return *this;
+			}
+
+
+			#ifdef PLF_DEFAULT_TEMPLATE_ARGUMENT_SUPPORT
+				template <bool is_const_rit = is_const_r, class = typename plf::enable_if<is_const_rit>::type >
+				queue_reverse_iterator& operator = (queue_reverse_iterator<false> &&source) PLF_NOEXCEPT
+			#else
+				queue_reverse_iterator& operator = (queue_reverse_iterator<!is_const_r> &&source) PLF_NOEXCEPT
+			#endif
+			{
+				assert(&source != this);
+				current = std::move(source.current);
+				return *this;
+			}
+		#endif
+
+
+
+		bool operator == (const queue_reverse_iterator &rh) const PLF_NOEXCEPT
+		{
+			return (current == rh.current);
+		}
+
+
+
+		bool operator == (const queue_reverse_iterator<!is_const_r> &rh) const PLF_NOEXCEPT
+		{
+			return (current == rh.current);
+		}
+
+
+
+		bool operator != (const queue_reverse_iterator &rh) const PLF_NOEXCEPT
+		{
+			return (current != rh.current);
+		}
+
+
+
+		bool operator != (const queue_reverse_iterator<!is_const_r> &rh) const PLF_NOEXCEPT
+		{
+			return (current != rh.current);
+		}
+
+
+
+		reference operator * () const PLF_NOEXCEPT
+		{
+			return *current.element_pointer;
+		}
+
+
+
+		pointer operator -> () const PLF_NOEXCEPT
+		{
+			return current.element_pointer;
+		}
+
+
+
+		queue_reverse_iterator & operator ++ ()
+		{
+			--current;
+			return *this;
+		}
+
+
+
+		queue_reverse_iterator operator ++ (int)
+		{
+			const queue_reverse_iterator copy(*this);
+			++*this;
+			return copy;
+		}
+
+
+
+		queue_reverse_iterator & operator -- ()
+		{
+			++current;
+			return *this;
+		}
+
+
+
+		queue_reverse_iterator operator -- (int)
+		{
+			const queue_reverse_iterator copy(*this);
+			--*this;
+			return copy;
+		}
+
+
+
+		queue_iterator<is_const_r> base() const PLF_NOEXCEPT
+		{
+			return (current.group_pointer != NULL) ? ++(queue_iterator<is_const_r>(current)) : queue_iterator<is_const_r>(NULL, NULL, NULL);
+		}
+
+
+
+	private:
+		// Used by rend(), etc:
+		queue_reverse_iterator(const group_pointer_type group_p, const pointer_type element_p) PLF_NOEXCEPT: current(group_p, element_p) {}
+
+	}; // queue_reverse_iterator
+
+
 }; // queue
+
+
+#ifdef PLF_CPP20_SUPPORT
+	template <class T>
+	concept queue_iterator_concept = requires { typename T::queue_iterator_tag; };
+#endif
 
 } // plf namespace
 
@@ -1552,17 +2127,27 @@ public:
 namespace std
 {
 
-template <class element_type, plf::queue_priority q_priority, class allocator_type>
+template <class element_type, plf::priority q_priority, class allocator_type>
 void swap (plf::queue<element_type, q_priority, allocator_type> &a, plf::queue<element_type, q_priority, allocator_type> &b) PLF_NOEXCEPT_SWAP(allocator_type)
 {
 	a.swap(b);
 }
 
+
+
+#ifdef PLF_CPP20_SUPPORT
+	// std::reverse_iterator overload, to allow use of queue with ranges and make_reverse_iterator primarily:
+	template <plf::queue_iterator_concept it_type>
+	class reverse_iterator<it_type> : public it_type::reverse_type
+	{
+	public:
+		typedef typename it_type::reverse_type rit;
+		using rit::rit;
+	};
+#endif
+
 }
 
-
-#undef PLF_MIN_BLOCK_CAPACITY
-#undef PLF_MAX_BLOCK_CAPACITY
 
 #undef PLF_EXCEPTIONS_SUPPORT
 #undef PLF_DEFAULT_TEMPLATE_ARGUMENT_SUPPORT
