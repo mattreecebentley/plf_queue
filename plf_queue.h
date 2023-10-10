@@ -321,6 +321,7 @@ namespace plf
 
 
 	enum priority { performance = 1, memory_use = 4};
+
 #endif
 
 
@@ -421,9 +422,9 @@ private:
 
 
 
-	void check_capacities_conformance(const plf::limits capacities) const
+	void check_capacities_conformance(const size_type min, const size_type max) const
 	{
-  		if (capacities.min < 2 || capacities.min > capacities.max || capacities.max > (std::numeric_limits<size_type>::max() / 2))
+  		if (min < 2 || min > max || max > (std::numeric_limits<size_type>::max() / 2))
 		{
 			#ifdef PLF_EXCEPTIONS_SUPPORT
 				throw std::length_error("Supplied memory block capacities outside of allowable ranges");
@@ -1243,7 +1244,7 @@ private:
 	void consolidate()
 	{
 		#ifdef PLF_MOVE_SEMANTICS_SUPPORT
-			queue temp(plf::limits((min_block_capacity > total_size) ? min_block_capacity : ((total_size > group_allocator_pair.max_block_capacity) ? group_allocator_pair.max_block_capacity : total_size), group_allocator_pair.max_block_capacity)); // Make first allocated block as large as size(), where possible
+			queue temp((min_block_capacity > total_size) ? min_block_capacity : ((total_size > group_allocator_pair.max_block_capacity) ? group_allocator_pair.max_block_capacity : total_size), group_allocator_pair.max_block_capacity); // Make first allocated block as large as size(), where possible
 
 			#ifdef PLF_TYPE_TRAITS_SUPPORT
 				if PLF_CONSTEXPR (std::is_move_assignable<element_type>::value && std::is_move_constructible<element_type>::value)
@@ -1269,17 +1270,17 @@ private:
 public:
 
 
-	void reshape(const plf::limits capacity_limits)
+	void reshape(const size_type min, const size_type max)
 	{
-		check_capacities_conformance(capacity_limits);
+		check_capacities_conformance(min, max);
 
-		min_block_capacity = capacity_limits.min;
-		group_allocator_pair.max_block_capacity = capacity_limits.max;
+		min_block_capacity = min;
+		group_allocator_pair.max_block_capacity = max;
 
 		// Need to check all group sizes, because append might append smaller blocks to the end of a larger block:
 		for (group_pointer_type current = first_group; current != NULL; current = current->next_group)
 		{
-			if (static_cast<size_type>(current->end - current->elements) < capacity_limits.min || static_cast<size_type>(current->end - current->elements) > capacity_limits.max)
+			if (static_cast<size_type>(current->end - current->elements) < min || static_cast<size_type>(current->end - current->elements) > max)
 			{
 				#ifdef PLF_TYPE_TRAITS_SUPPORT // If type is non-copyable/movable, cannot be consolidated, throw exception:
 					if PLF_CONSTEXPR (!((std::is_copy_constructible<element_type>::value && std::is_copy_assignable<element_type>::value) || (std::is_move_constructible<element_type>::value && std::is_move_assignable<element_type>::value)))

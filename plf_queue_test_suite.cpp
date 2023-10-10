@@ -146,7 +146,7 @@ int main()
 		{
 			title1("Test basics");
 
-			queue<unsigned int> i_queue(plf::limits(50, queue<unsigned int>::default_max_block_capacity()));
+			queue<unsigned int> i_queue(50, queue<unsigned int>::default_max_block_capacity());
 
 			for (unsigned int temp = 0; temp != 250000; ++temp)
 			{
@@ -172,7 +172,7 @@ int main()
  			failpass("Reserve test", i_queue3.size() == 250000);
 
 
- 			queue<unsigned int> i_queue7(plf::limits(50, 50));
+ 			queue<unsigned int> i_queue7(50, 50);
 
  			for (unsigned int temp = 0; temp != 449; ++temp)
  			{
@@ -181,7 +181,7 @@ int main()
 
  			failpass("Max limit test", i_queue7.capacity() == 450);
 
- 			i_queue7.reshape({100, 100});
+ 			i_queue7.reshape(100, 100);
 
  			failpass("Reshape test", i_queue7.capacity() == 500);
 
@@ -329,7 +329,7 @@ int main()
  		{
  			title2("queue Special Case Tests");
 
- 			queue<int> i_queue(plf::limits(50, 100));
+ 			queue<int> i_queue(50, 100);
 
  			for (int temp = 0; temp != 256; ++temp)
  			{
