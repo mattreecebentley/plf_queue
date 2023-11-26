@@ -223,10 +223,7 @@
 #include <limits>  // std::numeric_limits
 #include <memory> // std::uninitialized_copy, std::allocator
 #include <stdexcept> // std::length_error
-
-#ifdef PLF_MOVE_SEMANTICS_SUPPORT
-	#include <utility> // std::move
-#endif
+#include <utility> // std::move, std::swap
 
 #ifdef PLF_TYPE_TRAITS_SUPPORT
 	#include <cstddef> // offsetof, used in blank()
@@ -1507,6 +1504,7 @@ public:
 			else
 		#endif
 		{
+			// Otherwise, make the reads/writes as contiguous in memory as-possible (yes, it is faster than using std::swap with the individual variables):
 			const group_pointer_type	swap_current_group = current_group, swap_first_group = first_group;
 			const element_pointer_type	swap_top_element = top_element, swap_start_element = start_element, swap_end_element = end_element;
 			const size_type				swap_total_size = total_size, swap_total_capacity = total_capacity, swap_min_block_capacity = min_block_capacity, swap_max_block_capacity = group_allocator_pair.max_block_capacity;
@@ -1535,15 +1533,7 @@ public:
 				if PLF_CONSTEXPR (std::allocator_traits<allocator_type>::propagate_on_container_swap::value && !std::allocator_traits<allocator_type>::is_always_equal::value)
 			#endif
 			{
-				#ifdef PLF_MOVE_SEMANTICS_SUPPORT
-					allocator_type swap_allocator = std::move(static_cast<allocator_type &>(source));
-					static_cast<allocator_type &>(source) = std::move(static_cast<allocator_type &>(*this));
-					static_cast<allocator_type &>(*this) = std::move(swap_allocator);
-				#else
-					allocator_type swap_allocator = static_cast<allocator_type &>(source);
-					static_cast<allocator_type &>(source) = static_cast<allocator_type &>(*this);
-					static_cast<allocator_type &>(*this) = swap_allocator;
-				#endif
+				std::swap(static_cast<allocator_type &>(source), static_cast<allocator_type &>(*this));
 
 				// Reconstruct rebinds for swapped allocators:
 				static_cast<group_allocator_type &>(group_allocator_pair) = group_allocator_type(*this);
