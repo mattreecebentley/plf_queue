@@ -33,15 +33,16 @@
 #define PLF_EXCEPTIONS_SUPPORT
 
 #if ((defined(__clang__) || defined(__GNUC__)) && !defined(__EXCEPTIONS)) || (defined(_MSC_VER) && !defined(_CPPUNWIND))
-    // Suppress incorrect (unfixed MSVC bug) warnings re: constant expressions in constexpr-if statements
-	#pragma warning ( push )
-    #pragma warning ( disable : 4127 )
-
 	#undef PLF_EXCEPTIONS_SUPPORT
 	#include <exception> // std::terminate
 #endif
 
+
 #if defined(_MSC_VER) && !defined(__clang__) && !defined(__GNUC__)
+	 // Suppress incorrect (unfixed MSVC bug) warnings re: constant expressions in constexpr-if statements
+	#pragma warning ( push )
+	#pragma warning ( disable : 4127 )
+
 	#if _MSC_VER >= 1600
 		#define PLF_MOVE_SEMANTICS_SUPPORT
 	#endif
@@ -332,10 +333,10 @@ public:
 	typedef element_type value_type;
 
 	#ifdef PLF_ALLOCATOR_TRAITS_SUPPORT
-		typedef typename std::allocator_traits<allocator_type>::size_type			size_type;
+		typedef typename std::allocator_traits<allocator_type>::size_type 		size_type;
 		typedef element_type &														reference;
 		typedef const element_type &												const_reference;
-		typedef typename std::allocator_traits<allocator_type>::pointer 			pointer;
+		typedef typename std::allocator_traits<allocator_type>::pointer			pointer;
 		typedef typename std::allocator_traits<allocator_type>::const_pointer		const_pointer;
 	#else
 		typedef typename allocator_type::size_type			size_type;
@@ -349,11 +350,11 @@ private:
 	struct group; // Forward declaration for typedefs below
 
 	#ifdef PLF_ALLOCATOR_TRAITS_SUPPORT
-		typedef typename std::allocator_traits<allocator_type>::template rebind_alloc<group> 	group_allocator_type;
+		typedef typename std::allocator_traits<allocator_type>::template rebind_alloc<group>	group_allocator_type;
 		typedef typename std::allocator_traits<group_allocator_type>::pointer					group_pointer_type;
-		typedef typename std::allocator_traits<allocator_type>::pointer 						element_pointer_type;
+		typedef typename std::allocator_traits<allocator_type>::pointer						element_pointer_type;
 	#else
-		typedef typename allocator_type::template rebind<group>::other	group_allocator_type;
+		typedef typename allocator_type::template rebind<group>::other group_allocator_type;
 		typedef typename group_allocator_type::pointer					group_pointer_type;
 		typedef typename allocator_type::pointer						element_pointer_type;
 	#endif
@@ -361,9 +362,9 @@ private:
 
 	struct group : private allocator_type
 	{
-		const element_pointer_type		elements;
+		const element_pointer_type 	elements;
 		group_pointer_type				next_group, previous_group;
-		const element_pointer_type		end; // One-past the back element
+		const element_pointer_type 	end; // One-past the back element
 
 
 		#ifdef PLF_VARIADICS_SUPPORT
@@ -406,7 +407,7 @@ private:
 
 
 	group_pointer_type		current_group, first_group; // current group is location of top pointer, first_group is 'front' group, saves performance for ~queue etc
-	element_pointer_type	top_element, start_element, end_element; // start_element/end_element cache current_group->end/elements for better performance
+	element_pointer_type top_element, start_element, end_element; // start_element/end_element cache current_group->end/elements for better performance
 	size_type				total_size, total_capacity, min_block_capacity;
 	struct ebco_pair : group_allocator_type // Packaging the group allocator with the least-used member variable, for empty-base-class optimization
 	{
@@ -421,7 +422,7 @@ private:
 
 	void check_capacities_conformance(const size_type min, const size_type max) const
 	{
-  		if (min < 2 || min > max || max > (std::numeric_limits<size_type>::max() / 2))
+		if (min < 2 || min > max || max > (std::numeric_limits<size_type>::max() / 2))
 		{
 			#ifdef PLF_EXCEPTIONS_SUPPORT
 				throw std::length_error("Supplied memory block capacities outside of allowable ranges");
@@ -440,16 +441,16 @@ public:
 	{
 		return ((sizeof(element_type) * 8 > (sizeof(queue) + sizeof(group)) * 2) ? 8 : (((sizeof(queue) + sizeof(group)) * 2) / sizeof(element_type)) + 1) / priority;
 	}
-	
-	
+
+
 
 	static PLF_CONSTFUNC size_type default_max_block_capacity() PLF_NOEXCEPT
 	{
 		return ((sizeof(element_type) > 128) ? 768 : 12288 / sizeof(element_type)) / priority;
 	}
-	
-	
-	
+
+
+
 
 
 	// Default constructor:
@@ -596,10 +597,10 @@ private:
 	{
 		if (current_group->next_group == NULL) // no reserved groups or groups left over from previous pops, allocate new group
 		{
-			// Logic: if total_size > current group capacity * 1.25 or total_size < current group capacity * .75, make new group capacity == total_size, otherwise make it same as current group capacity. The new size is then truncated if necessary to fit within the user-specified min/max block sizes. This means we are more likely to end up with blocks of equal capacity when the total size is not increasing or lowering significantly over time - which in turn means previous blocks can get reused when they become empty.
+			// Logic: if total_size > current group capacity * 2 or total_size < current group capacity / 2, make new group capacity == total_size, otherwise make it same as current group capacity. The new size is then truncated if necessary to fit within the user-specified min/max block sizes. This means we are more likely to end up with blocks of equal capacity when the total size is not increasing or lowering significantly over time - which in turn means previous blocks can get reused when they become empty.
 			const size_type current_group_capacity = static_cast<size_type>(current_group->end - current_group->elements);
 			const size_type divided_size = total_size / priority;
-			const size_type new_group_capacity = ((divided_size < static_cast<size_type>(current_group_capacity * 2)) & (divided_size > static_cast<size_type>(current_group_capacity * .5))) ? current_group_capacity :
+			const size_type new_group_capacity = ((divided_size < (current_group_capacity * 2)) & (divided_size > (current_group_capacity / 2))) ? current_group_capacity :
 															(divided_size < min_block_capacity) ? min_block_capacity :
 															(divided_size > group_allocator_pair.max_block_capacity) ? group_allocator_pair.max_block_capacity : divided_size;
 			allocate_new_group(new_group_capacity, current_group);
@@ -845,7 +846,7 @@ public:
 
 		// Create element:
 		#ifdef PLF_EXCEPTIONS_SUPPORT
-			#if defined(PLF_TYPE_TRAITS_SUPPORT)
+			#ifdef PLF_TYPE_TRAITS_SUPPORT
 				if PLF_CONSTEXPR (std::is_nothrow_copy_constructible<element_type>::value)
 				{
 					PLF_CONSTRUCT(allocator_type, *this, top_element, element);
@@ -897,7 +898,7 @@ public:
 
 
 			#ifdef PLF_EXCEPTIONS_SUPPORT
-				#if defined(PLF_TYPE_TRAITS_SUPPORT)
+				#ifdef PLF_TYPE_TRAITS_SUPPORT
 					if PLF_CONSTEXPR (std::is_nothrow_move_constructible<element_type>::value)
 					{
 						PLF_CONSTRUCT(allocator_type, *this, top_element, std::move(element));
@@ -952,7 +953,7 @@ public:
 
 
 			#ifdef PLF_EXCEPTIONS_SUPPORT
-				#if defined(PLF_TYPE_TRAITS_SUPPORT)
+				#ifdef PLF_TYPE_TRAITS_SUPPORT
 					if PLF_CONSTEXPR (std::is_nothrow_constructible<element_type>::value)
 					{
 						PLF_CONSTRUCT(allocator_type, *this, top_element, std::forward<arguments>(parameters)...);
@@ -1157,12 +1158,10 @@ public:
 	size_type memory() const PLF_NOEXCEPT
 	{
 		size_type memory_use = sizeof(*this) + (sizeof(value_type) * total_capacity);
-		group_pointer_type temp_group = first_group;
 
-		while (temp_group != NULL)
+		for (group_pointer_type current = first_group; current != NULL; current = current->next_group)
 		{
 			memory_use += sizeof(group);
-			temp_group = temp_group->next_group;
 		}
 
 		return memory_use;
@@ -1309,45 +1308,20 @@ public:
 
 
 
-	bool operator == (const queue &rh) const PLF_NOEXCEPT
+	friend bool operator == (const queue &lh, const queue &rh) PLF_NOEXCEPT
 	{
-		assert (this != &rh);
+		assert (&lh != &rh);
 
-		if (total_size != rh.total_size)
+		if (lh.total_size != rh.total_size)
 		{
 			return false;
 		}
 
-		if (total_size == 0)
+		for (const_iterator lh_iterator = lh.begin_iterator, rh_iterator = rh.begin_iterator; lh_iterator != lh.end_iterator; ++lh_iterator, ++rh_iterator)
 		{
-			return true;
-		}
-
-		group_pointer_type this_group = first_group, rh_group = rh.first_group;
-		element_pointer_type this_pointer = start_element, rh_pointer = rh.start_element;
-
-		while(true)
-		{
-			if (*this_pointer != *rh_pointer)
+			if (*lh_iterator != *rh_iterator)
 			{
 				return false;
-			}
-
-			if (this_pointer == top_element)
-			{
-				break;
-			}
-
-			if (++this_pointer == this_group->end)
-			{
-				this_group = this_group->next_group;
-				this_pointer = this_group->elements;
-			}
-
-			if (++rh_pointer == rh_group->end)
-			{
-				rh_group = rh_group->next_group;
-				rh_pointer = rh_group->elements;
 			}
 		}
 
@@ -1356,9 +1330,9 @@ public:
 
 
 
-	bool operator != (const queue &rh) const PLF_NOEXCEPT
+	friend bool operator != (const queue &lh, const queue &rh) PLF_NOEXCEPT
 	{
-		return !(*this == rh);
+		return !(lh == rh);
 	}
 
 
@@ -1506,7 +1480,7 @@ public:
 		{
 			// Otherwise, make the reads/writes as contiguous in memory as-possible (yes, it is faster than using std::swap with the individual variables):
 			const group_pointer_type	swap_current_group = current_group, swap_first_group = first_group;
-			const element_pointer_type	swap_top_element = top_element, swap_start_element = start_element, swap_end_element = end_element;
+			const element_pointer_type swap_top_element = top_element, swap_start_element = start_element, swap_end_element = end_element;
 			const size_type				swap_total_size = total_size, swap_total_capacity = total_capacity, swap_min_block_capacity = min_block_capacity, swap_max_block_capacity = group_allocator_pair.max_block_capacity;
 
 			current_group = source.current_group;
@@ -1548,19 +1522,19 @@ public:
 
 	// Iterator forward declarations:
 	template <bool is_const> class			queue_iterator;
-	typedef queue_iterator<false>			iterator;
-	typedef queue_iterator<true> 			const_iterator;
+	typedef queue_iterator<false> 		iterator;
+	typedef queue_iterator<true>			const_iterator;
 	friend class queue_iterator<false>;
 	friend class queue_iterator<true>;
 
-	template <bool is_const_r> class		queue_reverse_iterator;
+	template <bool is_const_r> class 	queue_reverse_iterator;
 	typedef queue_reverse_iterator<false>	reverse_iterator;
 	typedef queue_reverse_iterator<true>	const_reverse_iterator;
 	friend class queue_reverse_iterator<false>;
 	friend class queue_reverse_iterator<true>;
 
 
-	
+
 	iterator begin() PLF_NOEXCEPT
 	{
 		return iterator(first_group, start_element);
@@ -1649,19 +1623,19 @@ public:
 	class queue_iterator
 	{
 	private:
-		typedef typename queue::group_pointer_type 		group_pointer_type;
-		typedef typename queue::pointer				 	pointer_type;
+		typedef typename queue::group_pointer_type		group_pointer_type;
+		typedef typename queue::pointer					pointer_type;
 
 		group_pointer_type		group_pointer;
-		pointer_type 			element_pointer;
+		pointer_type			element_pointer;
 
 	public:
 		struct queue_iterator_tag {};
 		typedef std::bidirectional_iterator_tag	iterator_category;
 		typedef std::bidirectional_iterator_tag	iterator_concept;
-		typedef typename queue::value_type 			value_type;
+		typedef typename queue::value_type			value_type;
 		typedef typename queue::difference_type		difference_type;
-		typedef queue_reverse_iterator<is_const> 	reverse_type;
+		typedef queue_reverse_iterator<is_const>	reverse_type;
 		typedef typename plf::conditional<is_const, typename queue::const_pointer, typename queue::pointer>::type		pointer;
 		typedef typename plf::conditional<is_const, typename queue::const_reference, typename queue::reference>::type	reference;
 
@@ -1874,20 +1848,20 @@ public:
 	class queue_reverse_iterator
 	{
 	private:
-		typedef typename queue::group_pointer_type 		group_pointer_type;
-		typedef typename queue::pointer				 	pointer_type;
+		typedef typename queue::group_pointer_type		group_pointer_type;
+		typedef typename queue::pointer					pointer_type;
 
 	protected:
 		iterator current;
 
 	public:
 		struct queue_iterator_tag {};
-		typedef std::bidirectional_iterator_tag 	iterator_category;
-		typedef std::bidirectional_iterator_tag 	iterator_concept;
-		typedef iterator 							iterator_type;
-		typedef typename queue::value_type 		value_type;
+		typedef std::bidirectional_iterator_tag	iterator_category;
+		typedef std::bidirectional_iterator_tag	iterator_concept;
+		typedef iterator							iterator_type;
+		typedef typename queue::value_type		value_type;
 		typedef typename queue::difference_type	difference_type;
-		typedef typename plf::conditional<is_const_r, typename queue::const_pointer, typename queue::pointer>::type		pointer;
+		typedef typename plf::conditional<is_const_r, typename queue::const_pointer, typename queue::pointer>::type 	pointer;
 		typedef typename plf::conditional<is_const_r, typename queue::const_reference, typename queue::reference>::type	reference;
 
 		friend class queue;
