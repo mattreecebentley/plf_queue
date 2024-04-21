@@ -1,4 +1,4 @@
-// Copyright (c) 2023, Matthew Bentley (mattreecebentley@gmail.com) www.plflib.org
+// Copyright (c) 2024, Matthew Bentley (mattreecebentley@gmail.com) www.plflib.org
 
 // zLib license (https://www.zlib.net/zlib_license.html):
 // This software is provided 'as-is', without any express or implied
@@ -617,10 +617,7 @@ private:
 	{
 		assert(&source != this);
 
-		if (source.total_size == 0)
-		{
-			return;
-		}
+		if (source.total_size == 0) return;
 
 		group_pointer_type current_copy_group = source.first_group;
 		const group_pointer_type end_copy_group = source.current_group;
@@ -1176,10 +1173,7 @@ private:
 		{
 			assert(&source != this);
 
-			if (source.total_size == 0)
-			{
-				return;
-			}
+			if (source.total_size == 0) return;
 
 			group_pointer_type current_copy_group = source.first_group;
 			const group_pointer_type end_copy_group = source.current_group;
@@ -1312,17 +1306,11 @@ public:
 	{
 		assert (&lh != &rh);
 
-		if (lh.total_size != rh.total_size)
-		{
-			return false;
-		}
+		if (lh.total_size != rh.total_size) return false;
 
 		for (const_iterator lh_iterator = lh.begin_iterator, rh_iterator = rh.begin_iterator; lh_iterator != lh.end_iterator; ++lh_iterator, ++rh_iterator)
 		{
-			if (*lh_iterator != *rh_iterator)
-			{
-				return false;
-			}
+			if (*lh_iterator != *rh_iterator) return false;
 		}
 
 		return true;
@@ -1340,10 +1328,7 @@ public:
 	// Remove trailing groups (as may be created by reserve or pop)
 	void trim() PLF_NOEXCEPT
 	{
-		if (current_group == NULL) // ie. queue is empty
-		{
-			return;
-		}
+		if (current_group == NULL) return; // ie. queue is empty
 
 		group_pointer_type temp_group = current_group->next_group;
 		current_group->next_group = NULL; // Set to NULL regardless of whether it is already NULL (avoids branching). Cuts off rest of groups from this group.
@@ -1378,10 +1363,7 @@ public:
 
 	void reserve(size_type reserve_amount)
 	{
-		if (reserve_amount == 0 || reserve_amount <= total_capacity)
-		{
-			return;
-		}
+		if (reserve_amount == 0 || reserve_amount <= total_capacity) return;
 
 		reserve_amount -= total_capacity;
 
@@ -1398,10 +1380,7 @@ public:
 		size_type number_of_max_capacity_groups = reserve_amount / group_allocator_pair.max_block_capacity,
 					remainder = reserve_amount - (number_of_max_capacity_groups * group_allocator_pair.max_block_capacity);
 
-		if (remainder < min_block_capacity)
-		{
-			remainder = min_block_capacity;
-		}
+		if (remainder < min_block_capacity) remainder = min_block_capacity;
 
 		if (first_group == NULL) // ie. uninitialized queue
 		{
