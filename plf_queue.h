@@ -191,9 +191,6 @@
 	#define PLF_NOEXCEPT_SWAP(the_allocator)
 #endif
 
-#undef PLF_IS_ALWAYS_EQUAL_SUPPORT
-
-
 #ifdef PLF_ALLOCATOR_TRAITS_SUPPORT
 	#ifdef PLF_VARIADICS_SUPPORT
 		#define PLF_CONSTRUCT(the_allocator, allocator_instance, location, ...) std::allocator_traits<the_allocator>::construct(allocator_instance, location, __VA_ARGS__)
@@ -724,7 +721,7 @@ private:
 
 	void blank() PLF_NOEXCEPT
 	{
-		#ifdef PLF_TYPE_TRAITS_SUPPORT
+		#ifdef PLF_IS_ALWAYS_EQUAL_SUPPORT // allocator_traits and type_traits always available when is_always_equal is available
 			if PLF_CONSTEXPR (std::is_standard_layout<queue>::value && std::allocator_traits<allocator_type>::is_always_equal::value && std::is_trivial<group_pointer_type>::value && std::is_trivial<element_pointer_type>::value) // if all pointer types are trivial, we can just nuke it from orbit with memset (NULL is always 0 in C++):
 			{
 				std::memset(static_cast<void *>(this), 0, offsetof(queue, min_block_capacity));
@@ -1069,13 +1066,13 @@ public:
 
 			destroy_all_data();
 
-			#ifdef PLF_ALLOCATOR_TRAITS_SUPPORT
+			#ifdef PLF_IS_ALWAYS_EQUAL_SUPPORT
 				if (std::allocator_traits<allocator_type>::propagate_on_container_move_assignment::value || std::allocator_traits<allocator_type>::is_always_equal::value || static_cast<allocator_type &>(*this) == static_cast<allocator_type &>(source))
 			#else
 				if (static_cast<allocator_type &>(*this) == static_cast<allocator_type &>(source))
 			#endif
 			{
-				#if defined(PLF_TYPE_TRAITS_SUPPORT) && defined(PLF_ALLOCATOR_TRAITS_SUPPORT)
+				#ifdef PLF_IS_ALWAYS_EQUAL_SUPPORT
 					if PLF_CONSTEXPR ((std::is_trivially_copyable<allocator_type>::value || std::allocator_traits<allocator_type>::is_always_equal::value) &&
 						std::is_trivial<group_pointer_type>::value && std::is_trivial<element_pointer_type>::value)
 					{
@@ -1438,7 +1435,7 @@ public:
 
 	void swap(queue &source) PLF_NOEXCEPT_SWAP(allocator_type)
 	{
-		#ifdef PLF_TYPE_TRAITS_SUPPORT
+		#ifdef PLF_IS_ALWAYS_EQUAL_SUPPORT
 			if PLF_CONSTEXPR (std::allocator_traits<allocator_type>::is_always_equal::value && std::is_trivial<group_pointer_type>::value && std::is_trivial<element_pointer_type>::value) // if all pointer types are trivial we can just copy using memcpy - avoids constructors/destructors etc and is faster
 			{
 				char temp[sizeof(queue)];
@@ -1482,7 +1479,7 @@ public:
 			source.min_block_capacity = swap_min_block_capacity;
 			source.group_allocator_pair.max_block_capacity = swap_max_block_capacity;
 
-			#ifdef PLF_ALLOCATOR_TRAITS_SUPPORT
+			#ifdef PLF_IS_ALWAYS_EQUAL_SUPPORT
 				if PLF_CONSTEXPR (std::allocator_traits<allocator_type>::propagate_on_container_swap::value && !std::allocator_traits<allocator_type>::is_always_equal::value)
 			#endif
 			{
@@ -2097,6 +2094,7 @@ void swap (plf::queue<element_type, q_priority, allocator_type> &a, plf::queue<e
 #undef PLF_DEFAULT_TEMPLATE_ARGUMENT_SUPPORT
 #undef PLF_ALIGNMENT_SUPPORT
 #undef PLF_INITIALIZER_LIST_SUPPORT
+#undef PLF_IS_ALWAYS_EQUAL_SUPPORT
 #undef PLF_TYPE_TRAITS_SUPPORT
 #undef PLF_ALLOCATOR_TRAITS_SUPPORT
 #undef PLF_VARIADICS_SUPPORT
