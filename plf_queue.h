@@ -1890,7 +1890,7 @@ public:
 				template <bool is_const_rit = is_const_r, class = typename plf::enable_if<is_const_rit>::type >
 				queue_reverse_iterator (queue_reverse_iterator<false> &&source) PLF_NOEXCEPT:
 			#else
-				queue_reverse_iterator (const queue_iterator<!is_const_r> &&source) PLF_NOEXCEPT:
+				queue_reverse_iterator (queue_iterator<!is_const_r> &&source) PLF_NOEXCEPT:
 			#endif
 				current(std::move(source.current))
 			{}
