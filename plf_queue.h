@@ -722,7 +722,7 @@ private:
 	void blank() PLF_NOEXCEPT
 	{
 		#ifdef PLF_IS_ALWAYS_EQUAL_SUPPORT // allocator_traits and type_traits always available when is_always_equal is available
-			if PLF_CONSTEXPR (std::is_standard_layout<queue>::value && std::allocator_traits<allocator_type>::is_always_equal::value && std::is_trivial<group_pointer_type>::value && std::is_trivial<element_pointer_type>::value) // if all pointer types are trivial, we can just nuke it from orbit with memset (NULL is always 0 in C++):
+			if PLF_CONSTEXPR (std::is_standard_layout<queue>::value && std::allocator_traits<allocator_type>::is_always_equal::value && std::is_trivially_destructible<group_pointer_type>::value && std::is_trivially_destructible<element_pointer_type>::value) // if all pointer types are trivial, we can just nuke it from orbit with memset (NULL is always 0 in C++):
 			{
 				std::memset(static_cast<void *>(this), 0, offsetof(queue, min_block_capacity));
 			}
@@ -1065,7 +1065,7 @@ public:
 		{
 			#ifdef PLF_IS_ALWAYS_EQUAL_SUPPORT
 				if PLF_CONSTEXPR ((std::is_trivially_copyable<allocator_type>::value || std::allocator_traits<allocator_type>::is_always_equal::value) &&
-					std::is_trivial<group_pointer_type>::value && std::is_trivial<element_pointer_type>::value)
+					std::is_trivially_copyable<group_pointer_type>::value && std::is_trivially_copyable<element_pointer_type>::value)
 				{
 					std::memcpy(static_cast<void *>(this), &source, sizeof(queue));
 				}
@@ -1086,7 +1086,7 @@ public:
 					if PLF_CONSTEXPR (std::allocator_traits<allocator_type>::propagate_on_container_move_assignment::value)
 				#endif
 				{
-					static_cast<allocator_type &>(*this) = std::move(static_cast<allocator_type &>(source));
+					static_cast<allocator_type &>(*this) = static_cast<allocator_type &>(source);
 					// Reconstruct rebinds:
 					static_cast<group_allocator_type &>(group_allocator_pair) = group_allocator_type(*this);
 				}
@@ -1115,7 +1115,7 @@ public:
 			{
 				move_assign(std::move(source));
 			}
-			else // Allocator isn't movable so copy elements from source and deallocate the source's blocks:
+			else // Allocator isn't equal so copy elements from source and deallocate the source's blocks:
 			{
 				queue temp(source);
 				swap(temp);
@@ -1448,7 +1448,7 @@ public:
 	void swap(queue &source) PLF_NOEXCEPT_SWAP(allocator_type)
 	{
 		#ifdef PLF_IS_ALWAYS_EQUAL_SUPPORT
-			if PLF_CONSTEXPR (std::allocator_traits<allocator_type>::is_always_equal::value && std::is_trivial<group_pointer_type>::value && std::is_trivial<element_pointer_type>::value) // if all pointer types are trivial we can just copy using memcpy - avoids constructors/destructors etc and is faster
+			if PLF_CONSTEXPR (std::allocator_traits<allocator_type>::is_always_equal::value && std::is_trivially_copyable<group_pointer_type>::value && std::is_trivially_copyable<element_pointer_type>::value) // if all pointer types are trivial we can just copy using memcpy - avoids constructors/destructors etc and is faster
 			{
 				char temp[sizeof(queue)];
 				std::memcpy(&temp, static_cast<void *>(this), sizeof(queue));
