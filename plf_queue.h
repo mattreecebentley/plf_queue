@@ -801,6 +801,7 @@ public:
 		}
 
 
+
 		// allocator-extended move constructor
 		queue(queue &&source, const allocator_type &alloc):
 			allocator_type(alloc),
@@ -814,6 +815,18 @@ public:
 			min_block_capacity(source.min_block_capacity),
 			group_allocator_pair(source.group_allocator_pair.max_block_capacity, alloc)
 		{
+			#ifdef PLF_IS_ALWAYS_EQUAL_SUPPORT
+				if PLF_CONSTEXPR (!std::allocator_traits<allocator_type>::is_always_equal::value)
+			#endif
+			{
+				if (alloc != static_cast<allocator_type &>(source))
+				{
+					blank();
+					*this = source;
+					source.destroy_all_data();
+				}
+			}
+
 			source.blank();
 		}
 	#endif
