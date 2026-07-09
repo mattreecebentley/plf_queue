@@ -1269,21 +1269,21 @@ public:
 
 	const_iterator begin() const PLF_NOEXCEPT
 	{
-		return const_iterator(first_group, start_element);
+		return cbegin();
 	}
 
 
 
 	iterator end() PLF_NOEXCEPT
 	{
-		return iterator(current_group, top_element + 1);
+		return iterator(current_group, top_element + (1 * (top_element != NULL)));
 	}
 
 
 
 	const_iterator end() const PLF_NOEXCEPT
 	{
-		return const_iterator(current_group, top_element + 1);
+		return cend();
 	}
 
 
@@ -1297,7 +1297,7 @@ public:
 
 	const_iterator cend() const PLF_NOEXCEPT
 	{
-		return const_iterator(current_group, top_element + 1);
+		return const_iterator(current_group, top_element + (1 * (top_element != NULL)));
 	}
 
 
@@ -1311,7 +1311,7 @@ public:
 
 	const_reverse_iterator rbegin() const PLF_NOEXCEPT
 	{
-		return const_reverse_iterator(current_group, top_element);
+		return crbegin();
 	}
 
 
@@ -1325,7 +1325,7 @@ public:
 
 	const_reverse_iterator rend() const PLF_NOEXCEPT
 	{
-		return const_reverse_iterator(first_group, start_element - 1);
+		return crend();
 	}
 
 
