@@ -956,9 +956,6 @@ public:
 	{
 		check_capacities_conformance(min, max);
 
-		min_block_capacity = min;
-		group_allocator_pair.max_block_capacity = max;
-
 		for (group_pointer_type current = first_group; current != NULL; current = current->next_group)
 		{
 			if (static_cast<size_type>(current->end - current->elements) < min || static_cast<size_type>(current->end - current->elements) > max)
@@ -975,12 +972,17 @@ public:
 					else
 				#endif
 				{
+					min_block_capacity = min;
+					group_allocator_pair.max_block_capacity = max;
 					consolidate();
 				}
 
 				return;
 			}
 		}
+
+		min_block_capacity = min;
+		group_allocator_pair.max_block_capacity = max;
 	}
 
 

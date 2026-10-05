@@ -333,6 +333,15 @@ int main()
 
 			failpass("Reshape non-copyable non-movable type throws length_error", threw_length_error);
 			failpass("Reshape non-copyable non-movable type leaves queue unchanged", ncm_queue.size() == 1 && ncm_queue.back().value == 1 && ncm_queue.capacity() == capacity_before);
+
+			// The rejected limits must not be kept: the next block should not be capped at 2 elements
+			while (ncm_queue.size() != capacity_before)
+			{
+				ncm_queue.emplace(1);
+			}
+
+			ncm_queue.emplace(1);
+			failpass("Reshape non-copyable non-movable type keeps the old block capacity limits", ncm_queue.capacity() - capacity_before > 2);
 		}
 		#endif
 
