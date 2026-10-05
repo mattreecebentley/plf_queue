@@ -62,6 +62,18 @@ void failpass(const char *test_type, bool condition)
 #endif
 
 
+#if defined(PLF_TYPE_TRAITS_SUPPORT) && (__cplusplus >= 201703L || (defined(_MSVC_LANG) && _MSVC_LANG >= 201703L))
+	struct non_copyable_non_movable
+	{
+		int value;
+
+		non_copyable_non_movable(const int v) : value(v) {}
+		non_copyable_non_movable(const non_copyable_non_movable &) = delete;
+		non_copyable_non_movable & operator = (const non_copyable_non_movable &) = delete;
+	};
+#endif
+
+
 
 int main()
 {
@@ -298,6 +310,31 @@ int main()
  			failpass("Perfect forwarding test 2", lvalueref == 1);
  		}
  		#endif
+
+
+		#if defined(PLF_TYPE_TRAITS_SUPPORT) && defined(PLF_VARIADICS_SUPPORT) && defined(PLF_EXCEPTIONS_SUPPORT) && (__cplusplus >= 201703L || (defined(_MSVC_LANG) && _MSVC_LANG >= 201703L)) // before C++17, reshape() cannot compile for this type because consolidate() is instantiated without if constexpr
+		{
+			title2("Reshape non-copyable non-movable type test");
+
+			queue<non_copyable_non_movable> ncm_queue;
+			ncm_queue.emplace(1);
+
+			const queue<non_copyable_non_movable>::size_type capacity_before = ncm_queue.capacity();
+			bool threw_length_error = false;
+
+			try
+			{
+				ncm_queue.reshape(2, 2); // the existing block is outside these limits and cannot be consolidated
+			}
+			catch (const std::length_error &)
+			{
+				threw_length_error = true;
+			}
+
+			failpass("Reshape non-copyable non-movable type throws length_error", threw_length_error);
+			failpass("Reshape non-copyable non-movable type leaves queue unchanged", ncm_queue.size() == 1 && ncm_queue.back().value == 1 && ncm_queue.capacity() == capacity_before);
+		}
+		#endif
 
 
 		{
