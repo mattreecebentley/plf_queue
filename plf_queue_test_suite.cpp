@@ -395,6 +395,59 @@ int main()
 
 			failpass("Reverse Iterator test 1", number_of_elements == 0);
 
+			{
+				queue<int> freed_queue(3, 8); // The first block holds 3 elements, the second 6
+
+				for (int counter = 0; counter != 6; ++counter)
+				{
+					freed_queue.push(counter);
+				}
+
+				freed_queue.pop();
+				freed_queue.pop();
+				freed_queue.pop(); // The first block is now empty, and is deallocated
+
+				int expected = 5;
+				bool correct = true;
+				number_of_elements = 0;
+
+				for (queue<int>::reverse_iterator current = freed_queue.rbegin(); current != freed_queue.rend() && number_of_elements != 10; ++current, ++number_of_elements)
+				{
+					correct = correct && *current == expected--;
+				}
+
+				failpass("Reverse Iterator after deallocating the front block test", correct && number_of_elements == 3);
+			}
+
+			{
+				queue<int> reused_queue(3, 3);
+
+				for (int counter = 0; counter != 6; ++counter)
+				{
+					reused_queue.push(counter);
+				}
+
+				reused_queue.pop();
+				reused_queue.pop();
+				reused_queue.pop(); // The first block is now empty, and is moved to the back for reuse
+
+				for (int counter = 6; counter != 9; ++counter)
+				{
+					reused_queue.push(counter); // Fills the reused block
+				}
+
+				int expected = 8;
+				bool correct = true;
+				number_of_elements = 0;
+
+				for (queue<int>::reverse_iterator current = reused_queue.rbegin(); current != reused_queue.rend() && number_of_elements != 10; ++current, ++number_of_elements)
+				{
+					correct = correct && *current == expected--;
+				}
+
+				failpass("Reverse Iterator after reusing the front block test", correct && number_of_elements == 6);
+			}
+
 		}
 
 	}

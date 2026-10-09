@@ -707,6 +707,7 @@ public:
 			{
 				current_group->next_group = first_group;
 				first_group->next_group = NULL;
+				first_group->previous_group = current_group; // It is now the last group
 			}
 			else
 			{
@@ -715,6 +716,7 @@ public:
 			}
 
 			first_group = next_group;
+			first_group->previous_group = NULL; // It is now the first group
 			start_element = next_group->elements;
 		}
 	}
