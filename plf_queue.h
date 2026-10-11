@@ -129,7 +129,7 @@ private:
 
 
 	group_pointer_type		current_group, first_group; // current group is location of top pointer, first_group is 'front' group, saves performance for ~queue etc
-	element_pointer_type top_element, start_element, end_element; // start_element/end_element cache current_group->end/elements for better performance
+	element_pointer_type top_element, start_element, end_element; // end_element caches current_group->end for better performance, start_element is front(), top_element is back()
 	size_type				total_size, total_capacity, min_block_capacity;
 	struct ebco_pair : group_allocator_type // Packaging the group allocator with the least-used member variable, for empty-base-class optimization
 	{
@@ -311,26 +311,6 @@ private:
 		start_element = top_element = first_group->elements;
 		end_element = first_group->end;
 		total_capacity = min_block_capacity;
-	}
-
-
-
-	void progress_to_next_group() // used by push/emplace
-	{
-		if (current_group->next_group == NULL) // no reserved groups or groups left over from previous pops, allocate new group
-		{
-			// Logic: if total_size > current group capacity * 2 or total_size < current group capacity / 2, make new group capacity == total_size, otherwise make it same as current group capacity. The new size is then truncated if necessary to fit within the user-specified min/max block sizes. This means we are more likely to end up with blocks of equal capacity when the total size is not increasing or lowering significantly over time - which in turn means previous blocks can get reused when they become empty.
-			const size_type current_group_capacity = static_cast<size_type>(current_group->end - current_group->elements);
-			const size_type divided_size = total_size / priority;
-			const size_type new_group_capacity = ((divided_size < (current_group_capacity * 2)) & (divided_size > (current_group_capacity / 2))) ? current_group_capacity :
-															(divided_size < min_block_capacity) ? min_block_capacity :
-															(divided_size > group_allocator_pair.max_block_capacity) ? group_allocator_pair.max_block_capacity : divided_size;
-			allocate_new_group(new_group_capacity, current_group);
-		}
-
-		current_group = current_group->next_group;
-		top_element = current_group->elements;
-		end_element = current_group->end;
 	}
 
 
@@ -564,7 +544,28 @@ public:
 	}
 
 
+
 private:
+
+	void progress_to_next_group() // used by push/emplace
+	{
+		if (current_group->next_group == NULL) // no reserved groups or groups left over from previous pops, allocate new group
+		{
+			// Logic: if total_size > current group capacity * 2 or total_size < current group capacity / 2, make new group capacity == total_size, otherwise make it same as current group capacity. The new size is then truncated if necessary to fit within the user-specified min/max block sizes. This means we are more likely to end up with blocks of equal capacity when the total size is not increasing or lowering significantly over time - which in turn means previous blocks can get reused when they become empty.
+			const size_type current_group_capacity = static_cast<size_type>(current_group->end - current_group->elements);
+			const size_type divided_size = total_size / priority;
+			const size_type new_group_capacity = ((divided_size < (current_group_capacity * 2)) & (divided_size > (current_group_capacity / 2))) ? current_group_capacity :
+															(divided_size < min_block_capacity) ? min_block_capacity :
+															(divided_size > group_allocator_pair.max_block_capacity) ? group_allocator_pair.max_block_capacity : divided_size;
+			allocate_new_group(new_group_capacity, current_group);
+		}
+
+		current_group = current_group->next_group;
+		top_element = current_group->elements;
+		end_element = current_group->end;
+	}
+
+
 
  	#if defined(PLF_VARIADICS_SUPPORT) && defined(PLF_MOVE_SEMANTICS_SUPPORT) // emplace and move-insert support
  		#define PLF_PUSH_OBJECT std::forward<arguments>(parameters)...
@@ -612,17 +613,13 @@ private:
 				}
 				catch (...)
 				{
-					if (top_element == start_element && total_size != 0)
+					if (top_element == current_group->elements && total_size != 0)
 					{
 						current_group = current_group->previous_group;
-						start_element = current_group->elements;
-						top_element = current_group->end - 1;
-					}
-					else
-					{
-						--top_element;
+						top_element = end_element = current_group->end;
 					}
 
+					--top_element;
 					throw;
 				}
 			}
