@@ -1264,7 +1264,7 @@ public:
 
 	reverse_iterator rend() PLF_NOEXCEPT
 	{
-		return reverse_iterator(first_group, start_element - 1);
+		return reverse_iterator(first_group, start_element - (start_element != NULL));
 	}
 
 
@@ -1285,7 +1285,7 @@ public:
 
 	const_reverse_iterator crend() const PLF_NOEXCEPT
 	{
-		return const_reverse_iterator(first_group, start_element - 1);
+		return const_reverse_iterator(first_group, start_element - (start_element != NULL));
 	}
 
 
