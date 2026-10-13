@@ -448,6 +448,59 @@ int main()
 				failpass("Reverse Iterator after reusing the front block test", correct && number_of_elements == 6);
 			}
 
+			{ // The back element is the last in its block, and the emptied front block was moved after it for reuse
+				queue<int> recycled_queue(3, 3);
+
+				for (int counter = 0; counter != 6; ++counter)
+				{
+					recycled_queue.push(counter);
+				}
+
+				recycled_queue.pop();
+				recycled_queue.pop();
+				recycled_queue.pop(); // The first block is now empty, and is moved to the back for reuse
+
+				int expected = 3;
+				bool correct = true;
+				number_of_elements = 0;
+
+				for (queue<int>::iterator current = recycled_queue.begin(); current != recycled_queue.end() && number_of_elements != 10; ++current, ++number_of_elements)
+				{
+					correct = correct && *current == expected++;
+				}
+
+				failpass("Iterator with a reused block after the back block test", correct && number_of_elements == 3 && *--recycled_queue.end() == 5);
+
+				queue<int> compare_queue(3, 3);
+
+				for (int counter = 3; counter != 6; ++counter)
+				{
+					compare_queue.push(counter);
+				}
+
+				failpass("Equality operator with a reused block after the back block test", recycled_queue == compare_queue);
+			}
+
+			{ // The back element is the last in its block, and reserve() has added a block after it
+				queue<int> reserved_queue(3, 3);
+
+				for (int counter = 0; counter != 3; ++counter)
+				{
+					reserved_queue.push(counter);
+				}
+
+				reserved_queue.reserve(6);
+
+				number_of_elements = 0;
+
+				for (queue<int>::iterator current = reserved_queue.begin(); current != reserved_queue.end() && number_of_elements != 10; ++current)
+				{
+					++number_of_elements;
+				}
+
+				failpass("Iterator with a reserved block after the back block test", number_of_elements == 3);
+			}
+
 		}
 
 	}

@@ -1220,7 +1220,8 @@ public:
 
 	iterator end() PLF_NOEXCEPT
 	{
-		return iterator(current_group, top_element + (1 * (top_element != NULL)));
+		if (top_element == NULL) return iterator(NULL, NULL);
+		return ++iterator(current_group, top_element);
 	}
 
 
@@ -1241,7 +1242,8 @@ public:
 
 	const_iterator cend() const PLF_NOEXCEPT
 	{
-		return const_iterator(current_group, top_element + (1 * (top_element != NULL)));
+		if (top_element == NULL) return const_iterator(NULL, NULL);
+		return ++const_iterator(current_group, top_element);
 	}
 
 
