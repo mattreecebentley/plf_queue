@@ -501,6 +501,22 @@ int main()
 				failpass("Iterator with a reserved block after the back block test", number_of_elements == 3);
 			}
 
+			{
+				queue<int> empty_queue; // No block allocated yet
+				const queue<int> &const_empty_queue = empty_queue;
+
+				failpass("Reverse Iterator on a queue with no blocks test", empty_queue.rbegin() == empty_queue.rend() && empty_queue.crbegin() == empty_queue.crend() && const_empty_queue.rbegin() == const_empty_queue.rend());
+
+				number_of_elements = 0;
+
+				for (queue<int>::reverse_iterator current = empty_queue.rbegin(); current != empty_queue.rend(); ++current)
+				{
+					++number_of_elements;
+				}
+
+				failpass("Reverse Iterator loop on a queue with no blocks test", number_of_elements == 0);
+			}
+
 		}
 
 	}
