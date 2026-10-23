@@ -35,6 +35,12 @@
 #include <limits>  // std::numeric_limits
 #include <stdexcept> // std::length_error
 #include <utility> // std::move, std::swap
+#include <algorithm> // std::lexicographical_compare, std::lexicographical_compare_three_way (C++20)
+
+#ifdef PLF_CPP20_SUPPORT
+	#include <compare> // std::compare_three_way, std::three_way_comparable, std::weak_ordering
+	#include <concepts> // std::convertible_to
+#endif
 
 #ifdef PLF_TYPE_TRAITS_SUPPORT
 	#include <cstddef> // offsetof, used in blank()
@@ -1012,6 +1018,57 @@ public:
 	{
 		return !(lh == rh);
 	}
+
+
+
+	friend bool operator < (const queue &lh, const queue &rh)
+	{
+		return std::lexicographical_compare(lh.cbegin(), lh.cend(), rh.cbegin(), rh.cend());
+	}
+
+
+
+	friend bool operator > (const queue &lh, const queue &rh)
+	{
+		return rh < lh;
+	}
+
+
+
+	friend bool operator <= (const queue &lh, const queue &rh)
+	{
+		return !(rh < lh);
+	}
+
+
+
+	friend bool operator >= (const queue &lh, const queue &rh)
+	{
+		return !(lh < rh);
+	}
+
+
+
+	#ifdef PLF_CPP20_SUPPORT
+		friend auto operator <=> (const queue &lh, const queue &rh) requires requires (const element_type &element) { { element < element } -> std::convertible_to<bool>; }
+		{
+			// Same as std::queue: use the element's <=> where available, otherwise synthesise an ordering from <
+			return std::lexicographical_compare_three_way(lh.cbegin(), lh.cend(), rh.cbegin(), rh.cend(),
+				[](const element_type &left, const element_type &right)
+				{
+					if constexpr (std::three_way_comparable<element_type>)
+					{
+						return std::compare_three_way()(left, right);
+					}
+					else
+					{
+						if (left < right) return std::weak_ordering::less;
+						if (right < left) return std::weak_ordering::greater;
+						return std::weak_ordering::equivalent;
+					}
+				});
+		}
+	#endif
 
 
 

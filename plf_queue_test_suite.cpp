@@ -7,7 +7,67 @@
 	#include <utility> // std::move
 #endif
 
+#include <algorithm> // std::sort
+#include <limits> // std::numeric_limits
+#include <map>
+#include <vector>
+
+#ifdef PLF_CPP20_SUPPORT
+	#include <compare> // std::strong_ordering, std::weak_ordering, std::partial_ordering, std::three_way_comparable
+	#include <type_traits> // std::is_same_v
+#endif
+
 #include "plf_queue.h"
+
+
+
+
+// Element types for the comparison operator tests:
+struct less_only_type // Has < but not <=>
+{
+	int value;
+
+	less_only_type(const int v) : value(v) {}
+	bool operator < (const less_only_type &rh) const { return value < rh.value; }
+	bool operator != (const less_only_type &rh) const { return value != rh.value; }
+};
+
+
+struct unordered_type // Has != (for ==) but no ordering
+{
+	int value;
+
+	unordered_type(const int v) : value(v) {}
+	bool operator != (const unordered_type &rh) const { return value != rh.value; }
+};
+
+
+#ifdef PLF_CPP20_SUPPORT
+	struct non_bool_result // Result of non_bool_less_type's <, cannot be used as a bool
+	{
+		explicit operator bool() const = delete;
+	};
+
+
+	struct non_bool_less_type // Has < but its result is not convertible to bool
+	{
+		int value;
+
+		non_bool_less_type(const int v) : value(v) {}
+		non_bool_result operator < (const non_bool_less_type &) const { return non_bool_result(); }
+		bool operator != (const non_bool_less_type &rh) const { return value != rh.value; }
+	};
+#endif
+
+
+template <class container_type, class value_type>
+void push_values(container_type &container, const value_type *values, const unsigned int count)
+{
+	for (unsigned int index = 0; index != count; ++index)
+	{
+		container.push(values[index]);
+	}
+}
 
 
 
@@ -519,6 +579,109 @@ int main()
 
 		}
 
+
+		{
+			title1("Comparison operator tests");
+
+			// Block capacity 3, so containers with more than 3 elements span several blocks
+			queue<int> empty1(3, 3), empty2(3, 3), one(3, 3), one_two(3, 3), one_three(3, 3), one_two_zero(3, 3), two_one(3, 3), long1(3, 3), long2(3, 3), long_differs(3, 3);
+
+			const int one_values[] = {1}, one_two_values[] = {1, 2}, one_three_values[] = {1, 3}, one_two_zero_values[] = {1, 2, 0}, two_one_values[] = {2, 1};
+			const int long_values[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9}, long_differs_values[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 10};
+
+			push_values(one, one_values, 1);
+			push_values(one_two, one_two_values, 2);
+			push_values(one_three, one_three_values, 2);
+			push_values(one_two_zero, one_two_zero_values, 3);
+			push_values(two_one, two_one_values, 2);
+			push_values(long1, long_values, 10);
+			push_values(long2, long_values, 10);
+			push_values(long_differs, long_differs_values, 10);
+
+			failpass("Comparison of two empty queues", !(empty1 < empty2) && !(empty1 > empty2) && empty1 <= empty2 && empty1 >= empty2);
+			failpass("Empty queue is less than non-empty queue", empty1 < one && one > empty1 && empty1 <= one && !(empty1 >= one));
+			failpass("Comparison of queues differing in the last element", one_two < one_three && one_three > one_two && !(one_three < one_two));
+			failpass("Prefix queue is less than longer queue", one_two < one_two_zero && !(one_two_zero < one_two) && one_two <= one_two_zero);
+			failpass("Elements compared front to back", one_two < two_one && !(two_one < one_two));
+			failpass("Comparison of equal multi-block queues", !(long1 < long2) && !(long1 > long2) && long1 <= long2 && long1 >= long2);
+			failpass("Comparison of multi-block queues differing in the last block", long1 < long_differs && long_differs > long1 && !(long_differs <= long1));
+
+			{ // The first has its front part-way through a block after pops, the second has a different block capacity
+				queue<int> popped_queue(3, 3), other_queue(4, 100);
+
+				for (int counter = 0; counter != 20; ++counter)
+				{
+					popped_queue.push(counter);
+				}
+
+				for (int counter = 0; counter != 16; ++counter)
+				{
+					popped_queue.pop();
+				}
+
+				for (int counter = 16; counter != 20; ++counter)
+				{
+					other_queue.push(counter);
+				}
+
+				failpass("Comparison of equal queues with different block layouts", !(popped_queue < other_queue) && !(other_queue < popped_queue) && popped_queue <= other_queue && popped_queue >= other_queue);
+
+				#ifdef PLF_CPP20_SUPPORT
+					failpass("Three-way comparison of equal queues with different block layouts", (popped_queue <=> other_queue) == 0);
+				#endif
+
+				other_queue.push(20);
+
+				failpass("Comparison of queues with different block layouts differing in length", popped_queue < other_queue && !(other_queue <= popped_queue));
+			}
+
+			std::map<queue<int>, int> queue_map;
+			queue_map[one_two] = 1;
+			queue_map[empty1] = 2;
+			queue_map[one_three] = 3;
+			queue_map[one_two] = 4; // Existing key
+
+			failpass("queue as std::map key test", queue_map.size() == 3 && queue_map.begin()->second == 2 && queue_map[one_two] == 4);
+
+			std::vector<queue<int> > queue_vector;
+			queue_vector.push_back(one_three);
+			queue_vector.push_back(empty1);
+			queue_vector.push_back(one_two);
+			std::sort(queue_vector.begin(), queue_vector.end());
+
+			failpass("std::sort on queues test", queue_vector[0] == empty1 && queue_vector[1] == one_two && queue_vector[2] == one_three);
+
+			queue<less_only_type> less_only1, less_only2;
+			less_only1.push(less_only_type(1));
+			less_only2.push(less_only_type(2));
+
+			failpass("Comparison of queues of an element type with only <", less_only1 < less_only2 && !(less_only2 <= less_only1));
+
+			queue<unordered_type> unordered1, unordered2; // Comparison operators must not be instantiated for this type
+			unordered1.push(unordered_type(1));
+			unordered2.push(unordered_type(1));
+
+			failpass("Equality of queues of an element type with no ordering", unordered1 == unordered2);
+
+			#ifdef PLF_CPP20_SUPPORT
+				static_assert(std::is_same_v<decltype(one_two <=> one_three), std::strong_ordering>);
+				failpass("Three-way comparison test", (one_two <=> one_three) < 0 && (two_one <=> one_two) > 0 && (long1 <=> long2) == 0 && (empty1 <=> one) < 0);
+
+				static_assert(std::is_same_v<decltype(less_only1 <=> less_only2), std::weak_ordering>);
+				failpass("Three-way comparison of an element type with only <", (less_only1 <=> less_only2) == std::weak_ordering::less);
+
+				queue<double> nan_queue, double_queue;
+				nan_queue.push(std::numeric_limits<double>::quiet_NaN());
+				double_queue.push(1.0);
+
+				static_assert(std::is_same_v<decltype(nan_queue <=> double_queue), std::partial_ordering>);
+				failpass("Three-way comparison of an element type with partial ordering", (nan_queue <=> double_queue) == std::partial_ordering::unordered);
+
+				static_assert(std::three_way_comparable<queue<int>, std::strong_ordering>);
+				static_assert(!std::three_way_comparable<queue<unordered_type> >);
+				static_assert(!std::three_way_comparable<queue<non_bool_less_type> >);
+			#endif
+		}
 	}
 
 	title1("Test Suite PASS - Press ENTER to Exit");
