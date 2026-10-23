@@ -90,7 +90,8 @@ private:
 
 
 		#ifdef PLF_VARIADICS_SUPPORT
-			group(const size_type elements_per_group, const group_pointer_type previous = NULL):
+			group(const allocator_type &alloc, const size_type elements_per_group, const group_pointer_type previous = NULL):
+				allocator_type(alloc),
 				elements(PLF_ALLOCATE(allocator_type, *this, elements_per_group, (previous == NULL) ? 0 : previous->elements)),
 				next_group(NULL),
 				previous_group(previous),
@@ -100,7 +101,8 @@ private:
 
 		#else
 			// This is a hack around the fact that allocator_type::construct only supports copy construction in C++03 and copy elision does not occur on the vast majority of compilers in this circumstance. And to avoid running out of memory (and performance loss) from allocating the same block twice, we're allocating in the copy constructor.
-			group(const size_type elements_per_group, const group_pointer_type previous = NULL) PLF_NOEXCEPT:
+			group(const allocator_type &alloc, const size_type elements_per_group, const group_pointer_type previous = NULL) PLF_NOEXCEPT:
+				allocator_type(alloc),
 				elements(NULL),
 				next_group(reinterpret_cast<group_pointer_type>(elements_per_group)),
 				previous_group(previous),
@@ -250,9 +252,9 @@ private:
 			try
 			{
 				#ifdef PLF_VARIADICS_SUPPORT
-					PLF_CONSTRUCT(group_allocator_type, group_allocator_pair, previous_group->next_group, capacity, previous_group);
+					PLF_CONSTRUCT(group_allocator_type, group_allocator_pair, previous_group->next_group, static_cast<allocator_type &>(*this), capacity, previous_group);
 				#else
-					PLF_CONSTRUCT(group_allocator_type, group_allocator_pair, previous_group->next_group, group(capacity, previous_group));
+					PLF_CONSTRUCT(group_allocator_type, group_allocator_pair, previous_group->next_group, group(static_cast<allocator_type &>(*this), capacity, previous_group));
 				#endif
 			}
 			catch (...)
@@ -262,9 +264,9 @@ private:
 			}
 		#else
 			#ifdef PLF_VARIADICS_SUPPORT
-				PLF_CONSTRUCT(group_allocator_type, group_allocator_pair, previous_group->next_group, capacity, previous_group);
+				PLF_CONSTRUCT(group_allocator_type, group_allocator_pair, previous_group->next_group, static_cast<allocator_type &>(*this), capacity, previous_group);
 			#else
-				PLF_CONSTRUCT(group_allocator_type, group_allocator_pair, previous_group->next_group, group(capacity, previous_group));
+				PLF_CONSTRUCT(group_allocator_type, group_allocator_pair, previous_group->next_group, group(static_cast<allocator_type &>(*this), capacity, previous_group));
 			#endif
 		#endif
 
@@ -289,9 +291,9 @@ private:
 			try
 			{
 				#ifdef PLF_VARIADICS_SUPPORT
-					PLF_CONSTRUCT(group_allocator_type, group_allocator_pair, first_group, min_block_capacity);
+					PLF_CONSTRUCT(group_allocator_type, group_allocator_pair, first_group, static_cast<allocator_type &>(*this), min_block_capacity);
 				#else
-					PLF_CONSTRUCT(group_allocator_type, group_allocator_pair, first_group, group(min_block_capacity));
+					PLF_CONSTRUCT(group_allocator_type, group_allocator_pair, first_group, group(static_cast<allocator_type &>(*this), min_block_capacity));
 				#endif
 			}
 			catch (...)
@@ -302,9 +304,9 @@ private:
 			}
 		#else
 			#ifdef PLF_VARIADICS_SUPPORT
-				PLF_CONSTRUCT(group_allocator_type, group_allocator_pair, first_group, min_block_capacity);
+				PLF_CONSTRUCT(group_allocator_type, group_allocator_pair, first_group, static_cast<allocator_type &>(*this), min_block_capacity);
 			#else
-				PLF_CONSTRUCT(group_allocator_type, group_allocator_pair, first_group, group(min_block_capacity));
+				PLF_CONSTRUCT(group_allocator_type, group_allocator_pair, first_group, group(static_cast<allocator_type &>(*this), min_block_capacity));
 			#endif
 		#endif
 
@@ -527,7 +529,9 @@ public:
 				if (alloc != static_cast<allocator_type &>(source))
 				{
 					blank();
-					*this = source;
+					queue temp(source, alloc);
+					move_assign(std::move(temp));
+					temp.blank();
 					source.destroy_all_data();
 				}
 			}
@@ -725,7 +729,18 @@ public:
 		assert(&source != this);
 
 		destroy_all_data();
-		queue temp(source);
+		blank(); // In case the copy below throws
+
+		#ifdef PLF_ALLOCATOR_TRAITS_SUPPORT
+			if PLF_CONSTEXPR (std::allocator_traits<allocator_type>::propagate_on_container_copy_assignment::value)
+			{
+				static_cast<allocator_type &>(*this) = static_cast<const allocator_type &>(source);
+				// Reconstruct rebinds:
+				static_cast<group_allocator_type &>(group_allocator_pair) = group_allocator_type(*this);
+			}
+		#endif
+
+		queue temp(source, static_cast<allocator_type &>(*this)); // Copy through this queue's allocator, so that the temporary's blocks can be taken over below
 
 		#ifdef PLF_MOVE_SEMANTICS_SUPPORT
 			*this = std::move(temp); // Avoid generating 2nd temporary
@@ -795,10 +810,13 @@ public:
 			{
 				move_assign(std::move(source));
 			}
-			else // Allocator isn't equal so copy elements from source and deallocate the source's blocks:
+			else // Allocator isn't equal so copy elements from source through this queue's allocator and deallocate the source's blocks:
 			{
-				queue temp(source);
-				swap(temp);
+				blank(); // In case the copy below throws
+				queue temp(source, static_cast<allocator_type &>(*this));
+				move_assign(std::move(temp));
+				temp.blank();
+				source.destroy_all_data();
 			}
 
 			source.blank();
@@ -925,7 +943,7 @@ private:
 	void consolidate()
 	{
 		#ifdef PLF_MOVE_SEMANTICS_SUPPORT
-			queue temp((min_block_capacity > total_size) ? min_block_capacity : ((total_size > group_allocator_pair.max_block_capacity) ? group_allocator_pair.max_block_capacity : total_size), group_allocator_pair.max_block_capacity); // Make first allocated block as large as size(), where possible
+			queue temp((min_block_capacity > total_size) ? min_block_capacity : ((total_size > group_allocator_pair.max_block_capacity) ? group_allocator_pair.max_block_capacity : total_size), group_allocator_pair.max_block_capacity, static_cast<allocator_type &>(*this)); // Make first allocated block as large as size(), where possible
 
 			#ifdef PLF_TYPE_TRAITS_SUPPORT
 				if PLF_CONSTEXPR (std::is_move_assignable<element_type>::value && std::is_move_constructible<element_type>::value)
@@ -941,7 +959,7 @@ private:
 			temp.min_block_capacity = min_block_capacity; // reset to correct value for future clear() or erasures
 			*this = std::move(temp);
 		#else
-			queue temp(*this);
+			queue temp(*this, static_cast<allocator_type &>(*this));
 			swap(temp);
 		#endif
 	}
@@ -1121,7 +1139,7 @@ public:
 
 	allocator_type get_allocator() const PLF_NOEXCEPT
 	{
-		return allocator_type();
+		return *this;
 	}
 
 
@@ -1137,7 +1155,7 @@ public:
 				std::memcpy(static_cast<void *>(&source), static_cast<void *>(&temp), sizeof(queue));
 			}
 			#ifdef PLF_MOVE_SEMANTICS_SUPPORT // If pointer types are not trivial, moving them is probably going to be more efficient than copying them below
-				else if PLF_CONSTEXPR (std::is_move_assignable<group_pointer_type>::value && std::is_move_assignable<element_pointer_type>::value && std::is_move_constructible<group_pointer_type>::value && std::is_move_constructible<element_pointer_type>::value)
+				else if PLF_CONSTEXPR (std::is_move_assignable<group_pointer_type>::value && std::is_move_assignable<element_pointer_type>::value && std::is_move_constructible<group_pointer_type>::value && std::is_move_constructible<element_pointer_type>::value && !(std::allocator_traits<allocator_type>::propagate_on_container_swap::value && !std::allocator_traits<allocator_type>::is_always_equal::value)) // move assignment would not swap allocators that propagate on swap only
 				{
 					queue temp(std::move(source));
 					source = std::move(*this);
@@ -1180,6 +1198,7 @@ public:
 
 				// Reconstruct rebinds for swapped allocators:
 				static_cast<group_allocator_type &>(group_allocator_pair) = group_allocator_type(*this);
+				static_cast<group_allocator_type &>(source.group_allocator_pair) = group_allocator_type(source);
 			} // else: undefined behaviour, as per standard
 		}
 	}
