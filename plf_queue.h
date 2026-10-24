@@ -1212,7 +1212,7 @@ public:
 				std::memcpy(static_cast<void *>(&source), static_cast<void *>(&temp), sizeof(queue));
 			}
 			#ifdef PLF_MOVE_SEMANTICS_SUPPORT // If pointer types are not trivial, moving them is probably going to be more efficient than copying them below
-				else if PLF_CONSTEXPR (std::is_move_assignable<group_pointer_type>::value && std::is_move_assignable<element_pointer_type>::value && std::is_move_constructible<group_pointer_type>::value && std::is_move_constructible<element_pointer_type>::value && !std::allocator_traits<allocator_type>::propagate_on_container_swap::value && std::allocator_traits<allocator_type>::is_always_equal::value) // move assignment would not swap allocators that propagate on swap only
+				else if PLF_CONSTEXPR (std::is_move_assignable<group_pointer_type>::value && std::is_move_assignable<element_pointer_type>::value && std::is_move_constructible<group_pointer_type>::value && std::is_move_constructible<element_pointer_type>::value && !(std::allocator_traits<allocator_type>::propagate_on_container_swap::value && !std::allocator_traits<allocator_type>::is_always_equal::value)) // move assignment would not swap allocators that propagate on swap only
 				{
 					queue temp(std::move(source));
 					source = std::move(*this);
