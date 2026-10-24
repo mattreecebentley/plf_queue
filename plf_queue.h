@@ -323,7 +323,10 @@ private:
 
 
 
-	void copy_from_source(const queue &source) // Note: this function is only called on an empty un-initialize()'d queue
+	#ifdef PLF_TYPE_TRAITS_SUPPORT // moving from source path only occurs if type traits are supported in consolidate()
+		template <bool is_move = false>
+	#endif
+	void copy_from_source(const queue &source)
 	{
 		assert(&source != this);
 
@@ -344,6 +347,13 @@ private:
 			// Copy groups to this queue:
 			while (current_copy_group != end_copy_group)
 			{
+				#ifdef PLF_TYPE_TRAITS_SUPPORT
+					if PLF_CONSTEXPR (is_move)
+					{
+						plf::uninitialized_move(start_pointer, current_copy_group->end, top_element, static_cast<allocator_type &>(*this));
+					}
+					else
+				#endif
 				plf::uninitialized_copy(start_pointer, current_copy_group->end, top_element, static_cast<allocator_type &>(*this));
 				top_element += current_copy_group->end - start_pointer;
 				current_copy_group = current_copy_group->next_group;
@@ -351,6 +361,13 @@ private:
 			}
 
 			// Handle special case of last group:
+			#ifdef PLF_TYPE_TRAITS_SUPPORT
+				if PLF_CONSTEXPR (is_move)
+				{
+					plf::uninitialized_move(start_pointer, source.top_element + 1, top_element, static_cast<allocator_type &>(*this));
+				}
+				else
+			#endif
 			plf::uninitialized_copy(start_pointer, source.top_element + 1, top_element, static_cast<allocator_type &>(*this));
 			top_element += source.top_element - start_pointer; // This should make top_element == the last "pushed" element, rather than the one past it
 			end_element = top_element + 1; // Since we have created a single group where capacity == size, this is correct
@@ -363,9 +380,21 @@ private:
 
 			while (current_copy_group != end_copy_group)
 			{
-				for (element_pointer_type element_to_copy = start_pointer; element_to_copy != current_copy_group->end; ++element_to_copy)
+				#ifdef PLF_TYPE_TRAITS_SUPPORT
+					if PLF_CONSTEXPR (is_move)
+					{
+						for (element_pointer_type element_to_copy = start_pointer; element_to_copy != current_copy_group->end; ++element_to_copy)
+						{
+							push(std::move(*element_to_copy));
+						}
+					}
+					else
+				#endif
 				{
-					push(*element_to_copy);
+					for (element_pointer_type element_to_copy = start_pointer; element_to_copy != current_copy_group->end; ++element_to_copy)
+					{
+						push(*element_to_copy);
+					}
 				}
 
 				current_copy_group = current_copy_group->next_group;
@@ -373,9 +402,21 @@ private:
 			}
 
 			// Handle special case of last group:
-			for (element_pointer_type element_to_copy = start_pointer; element_to_copy != source.top_element + 1; ++element_to_copy)
+			#ifdef PLF_TYPE_TRAITS_SUPPORT
+				if PLF_CONSTEXPR (is_move)
+				{
+					for (element_pointer_type element_to_copy = start_pointer; element_to_copy != source.top_element + 1; ++element_to_copy)
+					{
+						push(std::move(*element_to_copy));
+					}
+				}
+				else
+			#endif
 			{
-				push(*element_to_copy);
+				for (element_pointer_type element_to_copy = start_pointer; element_to_copy != source.top_element + 1; ++element_to_copy)
+				{
+					push(*element_to_copy);
+				}
 			}
 
 			min_block_capacity = source.min_block_capacity;
@@ -883,69 +924,6 @@ public:
 
 private:
 
-	#ifdef PLF_MOVE_SEMANTICS_SUPPORT
-		void move_from_source(queue &source) // This function is a mirror copy of copy_from_source, with move instead of copy
-		{
-			assert(&source != this);
-
-			if (source.total_size == 0) return;
-
-			group_pointer_type current_copy_group = source.first_group;
-			const group_pointer_type end_copy_group = source.current_group;
-
-			if (source.total_size <= group_allocator_pair.max_block_capacity) // most common case
-			{
-				const size_type original_min_block_capacity = min_block_capacity;
-				min_block_capacity = source.total_size;
-				initialize();
-				min_block_capacity = original_min_block_capacity;
-
-				element_pointer_type start_pointer = source.start_element;
-
-				// Copy groups to this queue:
-				while (current_copy_group != end_copy_group)
-				{
-					plf::uninitialized_move(start_pointer, current_copy_group->end, top_element, static_cast<allocator_type &>(*this));
-					top_element += current_copy_group->end - start_pointer;
-					current_copy_group = current_copy_group->next_group;
-					start_pointer = current_copy_group->elements;
-				}
-
-				// Handle special case of last group:
-				plf::uninitialized_copy(start_pointer, source.top_element + 1, top_element, static_cast<allocator_type &>(*this));
-				top_element += source.top_element - start_pointer; // This should make top_element == the last "pushed" element, rather than the one past it
-				end_element = top_element + 1; // Since we have created a single group where capacity == size, this is correct
-				total_size = source.total_size;
-			}
-			else // uncommon edge case, so not optimising:
-			{
-				min_block_capacity = group_allocator_pair.max_block_capacity;
-				element_pointer_type start_pointer = source.start_element;
-
-				while (current_copy_group != end_copy_group)
-				{
-					for (element_pointer_type element_to_copy = start_pointer; element_to_copy != current_copy_group->end; ++element_to_copy)
-					{
-						push(std::move(*element_to_copy));
-					}
-
-					current_copy_group = current_copy_group->next_group;
-					start_pointer = current_copy_group->elements;
-				}
-
-				// Handle special case of last group:
-				for (element_pointer_type element_to_copy = start_pointer; element_to_copy != source.top_element + 1; ++element_to_copy)
-				{
-					push(std::move(*element_to_copy));
-				}
-
-				min_block_capacity = source.min_block_capacity;
-			}
-		}
-	#endif
-
-
-
 	void consolidate()
 	{
 		#ifdef PLF_MOVE_SEMANTICS_SUPPORT
@@ -954,7 +932,7 @@ private:
 			#ifdef PLF_TYPE_TRAITS_SUPPORT
 				if PLF_CONSTEXPR (std::is_move_assignable<element_type>::value && std::is_move_constructible<element_type>::value)
 				{
-					temp.move_from_source(*this);
+					temp.copy_from_source<true>(*this);
 				}
 				else
 			#endif
