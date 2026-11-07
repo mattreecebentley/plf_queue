@@ -15,6 +15,7 @@
 #ifdef PLF_CPP20_SUPPORT
 	#include <compare> // std::strong_ordering, std::weak_ordering, std::partial_ordering, std::three_way_comparable
 	#include <type_traits> // std::is_same_v
+	#include <string> // compile-time tests
 #endif
 
 #include "plf_queue.h"
@@ -61,6 +62,226 @@ struct unordered_type // Has != (for ==) but no ordering
 		non_bool_result operator < (const non_bool_less_type &) const { return non_bool_result(); }
 		bool operator != (const non_bool_less_type &rh) const { return value != rh.value; }
 	};
+#endif
+
+
+#ifdef PLF_EXCEPTIONS_SUPPORT
+	bool throw_on_copy = false;
+
+	struct throwing_copy_type // Copy construction throws while throw_on_copy is true
+	{
+		int value;
+
+		throwing_copy_type(const int v) : value(v) {}
+
+		throwing_copy_type(const throwing_copy_type &source) : value(source.value)
+		{
+			if (throw_on_copy) throw 1;
+		}
+	};
+#endif
+
+
+#ifdef PLF_CPP20_SUPPORT
+	// Compile-time tests. Each function runs inside a static_assert, so the test suite fails to compile if any of these operations cannot be evaluated at compile time:
+	template <class element_type>
+	constexpr plf::queue<element_type> constexpr_make_queue(const int count)
+	{
+		plf::queue<element_type> values(3, 8); // small blocks, so that several blocks are used
+
+		for (int counter = 0; counter != count; ++counter)
+		{
+			values.push(element_type(counter));
+		}
+
+		return values;
+	}
+
+
+	constexpr bool constexpr_push_pop_test()
+	{
+		plf::queue<int> values = constexpr_make_queue<int>(100);
+		int total = 0, expected = 0;
+		bool order_ok = values.back() == 99;
+
+		while (!values.empty())
+		{
+			order_ok = order_ok && values.front() == expected++;
+			total += values.front();
+			values.pop();
+		}
+
+		values.emplace(5);
+		return order_ok && total == 4950 && values.size() == 1 && values.front() == 5 && values.back() == 5;
+	}
+
+
+	constexpr bool constexpr_block_reuse_test() // Pushing and popping in turn, so that emptied front blocks are moved to the back and reused
+	{
+		plf::queue<int> values(3, 3);
+		int next_push = 0, next_pop = 0;
+		bool order_ok = true;
+
+		for (int round = 0; round != 20; ++round)
+		{
+			for (int counter = 0; counter != 5; ++counter)
+			{
+				values.push(next_push++);
+			}
+
+			for (int counter = 0; counter != 4; ++counter)
+			{
+				order_ok = order_ok && values.front() == next_pop++;
+				values.pop();
+			}
+		}
+
+		return order_ok && values.size() == 20 && values.front() == next_pop && values.back() == next_push - 1;
+	}
+
+
+	constexpr bool constexpr_copy_move_test()
+	{
+		const plf::queue<int> source = constexpr_make_queue<int>(50);
+		plf::queue<int> copy_constructed(source);
+		plf::queue<int> copy_assigned = constexpr_make_queue<int>(5);
+		copy_assigned = source;
+		plf::queue<int> move_constructed(std::move(copy_constructed));
+		plf::queue<int> move_assigned = constexpr_make_queue<int>(5);
+		move_assigned = std::move(copy_assigned);
+
+		return move_constructed == source && move_assigned == source && move_constructed.size() == 50;
+	}
+
+
+	constexpr bool constexpr_swap_test()
+	{
+		plf::queue<int> values1 = constexpr_make_queue<int>(30), values2 = constexpr_make_queue<int>(7);
+		values1.swap(values2);
+		return values1.size() == 7 && values2.size() == 30 && values1.front() == 0 && values1.back() == 6 && values2.back() == 29;
+	}
+
+
+	constexpr bool constexpr_capacity_test()
+	{
+		plf::queue<int> values;
+		values.reserve(100);
+		const bool reserve_ok = values.capacity() >= 100;
+
+		values = constexpr_make_queue<int>(100);
+
+		for (int counter = 0; counter != 90; ++counter)
+		{
+			values.pop();
+		}
+
+		values.trim();
+		values.shrink_to_fit();
+		values.reshape(10, 20);
+		const bool reshape_ok = values.size() == 10 && values.front() == 90 && values.back() == 99;
+
+		values.clear();
+		return reserve_ok && reshape_ok && values.empty() && values.memory() >= sizeof(values);
+	}
+
+
+	constexpr bool constexpr_comparison_test()
+	{
+		const plf::queue<int> values1 = constexpr_make_queue<int>(10), values2 = constexpr_make_queue<int>(11);
+		return values1 != values2 && values1 < values2 && values1 <= values2 && values2 > values1 && values2 >= values1 && (values1 <=> values2) < 0;
+	}
+
+
+	constexpr bool constexpr_iterator_test()
+	{
+		plf::queue<int> values = constexpr_make_queue<int>(20);
+		values.pop(); // the front element is now in the middle of the first block
+		values.pop();
+
+		int forward_total = 0, reverse_total = 0, previous = -1, reverse_previous = 20;
+		bool order_ok = true;
+
+		for (plf::queue<int>::const_iterator current = values.begin(); current != values.end(); ++current)
+		{
+			order_ok = order_ok && *current > previous;
+			previous = *current;
+			forward_total += *current;
+		}
+
+		for (plf::queue<int>::const_reverse_iterator current = values.rbegin(); current != values.rend(); ++current)
+		{
+			order_ok = order_ok && *current < reverse_previous;
+			reverse_previous = *current;
+			reverse_total += *current;
+		}
+
+		plf::queue<int>::reverse_iterator last = values.rend();
+		--last;
+
+		return order_ok && forward_total == 189 && reverse_total == 189 && *last == 2 && values.rend().base() == values.begin();
+	}
+
+
+	constexpr bool constexpr_empty_reuse_test()
+	{
+		plf::queue<int> values = constexpr_make_queue<int>(20);
+
+		while (!values.empty())
+		{
+			values.pop();
+		}
+
+		const bool empty_ok = values.begin() == values.end() && values.rbegin() == values.rend();
+		values.push(1);
+		values.push(2);
+
+		plf::queue<int>::reverse_iterator last = values.rend();
+		--last;
+
+		return empty_ok && *last == 1 && values.rend().base() == values.begin() && values.rbegin().base() == values.end();
+	}
+
+
+	constexpr bool constexpr_string_test()
+	{
+		plf::queue<std::string> values;
+
+		for (int counter = 0; counter != 40; ++counter)
+		{
+			values.push(std::string(30, static_cast<char>('a' + (counter % 26))));
+		}
+
+		plf::queue<std::string> values2(values);
+		plf::queue<std::string> values3(std::move(values));
+		std::size_t total = 0;
+
+		while (!values2.empty())
+		{
+			total += values2.front().size();
+			values2.pop();
+		}
+
+		while (!values3.empty())
+		{
+			total += values3.front().size();
+			values3.pop();
+		}
+
+		return total == 2400 && values.empty();
+	}
+
+
+	static_assert(constexpr_push_pop_test(), "constexpr push/pop test");
+	static_assert(constexpr_block_reuse_test(), "constexpr block reuse test");
+	static_assert(constexpr_copy_move_test(), "constexpr copy/move test");
+	static_assert(constexpr_swap_test(), "constexpr swap test");
+	static_assert(constexpr_capacity_test(), "constexpr capacity test");
+	static_assert(constexpr_comparison_test(), "constexpr comparison test");
+	static_assert(constexpr_iterator_test(), "constexpr iterator test");
+	static_assert(constexpr_empty_reuse_test(), "constexpr empty queue reuse test");
+	#if !(defined(__clang__) && defined(_GLIBCXX_RELEASE) && _GLIBCXX_RELEASE < 15) // clang cannot constant-evaluate std::string from libstdc++ 13 and earlier
+		static_assert(constexpr_string_test(), "constexpr string test");
+	#endif
 #endif
 
 
@@ -627,6 +848,130 @@ int main()
 
 				failpass("Reverse Iterator loop on a queue with no blocks test", number_of_elements == 0);
 			}
+
+			{ // Queues which are empty but still have allocated blocks, eg. after popping every element or after reserve():
+				queue<int> empty_queue(3, 3);
+
+				for (int counter = 0; counter != 7; ++counter)
+				{
+					empty_queue.push(counter);
+				}
+
+				while (!empty_queue.empty())
+				{
+					empty_queue.pop();
+				}
+
+				const queue<int> &const_empty_queue = empty_queue;
+
+				failpass("Iterators of a popped-empty queue", empty_queue.begin() == empty_queue.end() && empty_queue.rbegin() == empty_queue.rend() && const_empty_queue.begin() == const_empty_queue.end() && const_empty_queue.rbegin() == const_empty_queue.rend());
+
+				const queue<int>::size_type capacity_before = empty_queue.capacity();
+				empty_queue.push(10);
+				empty_queue.push(11);
+
+				failpass("Push after popping every element reuses the blocks", empty_queue.size() == 2 && empty_queue.front() == 10 && empty_queue.back() == 11 && empty_queue.capacity() == capacity_before && *empty_queue.begin() == 10);
+
+				queue<int> reserved_queue;
+				reserved_queue.reserve(50);
+
+				failpass("Iterators of a reserved empty queue", reserved_queue.empty() && reserved_queue.begin() == reserved_queue.end() && reserved_queue.rbegin() == reserved_queue.rend());
+
+				const queue<int>::size_type reserved_capacity = reserved_queue.capacity();
+				reserved_queue.push(5);
+
+				failpass("Push after reserve uses the reserved block", reserved_queue.size() == 1 && reserved_queue.front() == 5 && reserved_queue.capacity() == reserved_capacity);
+			}
+
+			{ // Reverse iteration across block boundaries, down to rend():
+				queue<int> reverse_queue(3, 3);
+
+				for (int counter = 0; counter != 8; ++counter)
+				{
+					reverse_queue.push(counter);
+				}
+
+				int expected = 7;
+				bool order_correct = true;
+
+				for (queue<int>::reverse_iterator current = reverse_queue.rbegin(); current != reverse_queue.rend(); ++current)
+				{
+					order_correct = order_correct && *current == expected--;
+				}
+
+				failpass("Reverse iteration order", order_correct && expected == -1);
+
+				queue<int>::reverse_iterator last = reverse_queue.rend();
+				--last;
+
+				failpass("Decrementing rend() gives the front element", *last == 0 && last.base() == ++reverse_queue.begin());
+				failpass("rend().base() == begin()", reverse_queue.rend().base() == reverse_queue.begin() && reverse_queue.rbegin().base() == reverse_queue.end());
+
+				queue<int>::iterator first = reverse_queue.begin();
+				++first;
+				--first;
+
+				failpass("Iterator decrement back to begin()", first == reverse_queue.begin() && *first == 0);
+
+				reverse_queue.pop(); // The front element is now in the middle of the first block
+				expected = 7;
+				order_correct = true;
+
+				for (queue<int>::reverse_iterator current = reverse_queue.rbegin(); current != reverse_queue.rend(); ++current)
+				{
+					order_correct = order_correct && *current == expected--;
+				}
+
+				failpass("Reverse iteration order after pop", order_correct && expected == 0);
+
+				last = reverse_queue.rend();
+				--last;
+
+				failpass("Decrementing rend() after pop gives the front element", *last == 1 && reverse_queue.rend().base() == reverse_queue.begin());
+			}
+
+			#ifdef PLF_EXCEPTIONS_SUPPORT
+			{ // A push which throws on an empty queue leaves it empty and usable
+				const throwing_copy_type element(3);
+				queue<throwing_copy_type> throw_queue(3, 3);
+				bool threw = false;
+				throw_on_copy = true;
+
+				try
+				{
+					throw_queue.push(element); // throws while constructing the first element of the queue
+				}
+				catch (int)
+				{
+					threw = true;
+				}
+
+				throw_on_copy = false;
+				failpass("Throwing first push leaves queue empty", threw && throw_queue.empty() && throw_queue.begin() == throw_queue.end() && throw_queue.rbegin() == throw_queue.rend());
+
+				throw_queue.push(element);
+				failpass("Push after throwing first push", throw_queue.size() == 1 && throw_queue.front().value == 3 && throw_queue.back().value == 3);
+
+				throw_queue.pop();
+				threw = false;
+				throw_on_copy = true;
+
+				try
+				{
+					throw_queue.push(element); // throws on a popped-empty queue
+				}
+				catch (int)
+				{
+					threw = true;
+				}
+
+				throw_on_copy = false;
+				failpass("Throwing push on a popped-empty queue leaves it empty", threw && throw_queue.empty() && throw_queue.begin() == throw_queue.end() && throw_queue.rbegin() == throw_queue.rend());
+
+				throw_queue.push(element);
+				failpass("Push after throwing push on a popped-empty queue", throw_queue.size() == 1 && throw_queue.front().value == 3);
+			}
+			#endif
 
 		}
 
