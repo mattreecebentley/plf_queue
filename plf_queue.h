@@ -1184,7 +1184,7 @@ public:
 
 	PLF_CONSTFUNC allocator_type get_allocator() const PLF_NOEXCEPT
 	{
-		return *this;
+		return static_cast<allocator_type>(*this);
 	}
 
 
